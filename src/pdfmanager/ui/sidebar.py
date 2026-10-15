@@ -274,7 +274,8 @@ class CommentsPanel(QTreeWidget):
         current = self.currentItem()
         keep = current.data(0, Qt.ItemDataRole.UserRole) if current else None
         self.clear()
-        infos = A.list_annots(self.doc)
+        # Les textes ajoutés font partie de la page, pas des commentaires.
+        infos = [a for a in A.list_annots(self.doc) if a.kind != "Typewriter"]
         if not infos:
             self.addTopLevelItem(QTreeWidgetItem(["Aucun commentaire"]))
             return

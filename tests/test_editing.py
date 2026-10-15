@@ -4,8 +4,8 @@ from conftest import make_pdf
 
 from pdfmanager.core import annotations as A
 from pdfmanager.core import editing as E
+from pdfmanager.core import fonts, text
 from pdfmanager.core import pages as P
-from pdfmanager.core import text
 from pdfmanager.core.document import PdfDocument
 
 SERIF = pymupdf.Font("tiro").buffer  # police complète fournie par MuPDF (portable)
@@ -59,7 +59,69 @@ def test_edit_keeps_full_original_font_and_neighbours(tmp_path):
     assert words(doc)[:2] == ["Bonjour", "Alice"]
 
 
-def test_subset_font_falls_back_and_says_so(tmp_path):
+def box_font(path, name="TestSans"):
+    """Police TrueType minimale (un rectangle par lettre), portable : sert de « police
+    installée sur l'ordinateur » dans les tests."""
+    from fontTools.fontBuilder import FontBuilder
+    from fontTools.pens.ttGlyphPen import TTGlyphPen
+
+    chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZéèàç"
+    names = [".notdef", "space"] + [f"g{ord(c)}" for c in chars]
+    fb = FontBuilder(1000, isTTF=True)
+    fb.setupGlyphOrder(names)
+    fb.setupCharacterMap({32: "space", **{ord(c): f"g{ord(c)}" for c in chars}})
+    glyphs = {}
+    for n in names:
+        pen = TTGlyphPen(None)
+        if n not in (".notdef", "space"):
+            for point in ((50, 0), (50, 700), (450, 700), (450, 0)):
+                (pen.lineTo if point != (50, 0) else pen.moveTo)(point)
+            pen.closePath()
+        glyphs[n] = pen.glyph()
+    fb.setupGlyf(glyphs)
+    fb.setupHorizontalMetrics({n: (500, 50) for n in names})
+    fb.setupHorizontalHeader(ascent=800, descent=-200)
+    fb.setupNameTable({"familyName": name, "styleName": "Regular", "psName": name})
+    fb.setupOS2()
+    fb.setupPost()
+    fb.save(str(path))
+    return path
+
+
+def test_installed_font_keeps_original_look(tmp_path, monkeypatch):
+    """Police intégrée en partie, mais installée sur l'ordinateur : le texte modifié la
+    garde (réduite aux caractères utilisés), sans avertissement."""
+    font = box_font(tmp_path / "TestSans.ttf")
+    d = pymupdf.open()
+    p = d.new_page()
+    p.insert_font(fontname="F1", fontfile=str(font))
+    p.insert_text((72, 100), "abc", fontname="F1", fontsize=14)
+    p.insert_text((72, 200), "Ligne de test", fontname="F1", fontsize=14)
+    d.subset_fonts()
+    d.save(tmp_path / "t.pdf")
+    doc = PdfDocument(tmp_path / "t.pdf")
+    monkeypatch.setattr(fonts, "index", lambda: {"testsans": font, "testsansregular": font})
+    warnings = E.edit_block(doc, block(doc, 80, 95), "abc zèbre")
+    assert not any("police" in w for w in warnings)
+    used = [f[3] for f in doc.doc[0].get_fonts()]
+    assert sum("TestSans" in n for n in used) == 2  # l'originale et sa copie réduite
+    assert "zèbre" in words(doc) and "Ligne" in words(doc)
+    assert len(doc.current_bytes()) < 40_000  # police réduite, pas le fichier entier
+
+
+def test_only_changed_lines_are_rewritten(tmp_path):
+    doc = font_pdf(tmp_path / "c.pdf")
+    before = doc.doc[0].get_text("dict")["blocks"][0]["lines"][1]["spans"][0]["font"]
+    E.edit_block(doc, block(doc, 80, 95), "Bonsoir Alice\nLigne suivante")
+    lines = doc.doc[0].get_text("dict")["blocks"]
+    fonts_used = {s["text"].strip(): s["font"] for b in lines for li in b["lines"]
+                  for s in li["spans"]}
+    assert fonts_used["Ligne suivante"] == before  # ligne inchangée : intacte
+    assert "Bonsoir" in words(doc)
+
+
+def test_subset_font_falls_back_and_says_so(tmp_path, monkeypatch):
+    monkeypatch.setattr(fonts, "find", lambda name: None)  # police absente de l'ordinateur
     doc = font_pdf(tmp_path / "s.pdf", subset=True)
     warnings = E.edit_block(doc, block(doc, 80, 195), "Paragraphe modifié")
     assert any("remplacée par Times" in w for w in warnings)
@@ -103,13 +165,29 @@ def test_no_text_under_click(tmp_path):
     assert block(doc, 500, 700) is None
 
 
-def test_add_text_is_upright_on_rotated_page(tmp_path):
-    doc = font_pdf(tmp_path / "r.pdf", rotate=90)
-    E.add_text(doc, 0, pymupdf.Point(300, 300), "Ajouté à droite", fontsize=12)
+@pytest.mark.parametrize("rotation", [0, 90, 270])
+def test_added_text_is_upright_movable_and_resizable(tmp_path, rotation):
+    """Texte ajouté (« machine à écrire ») : droit à l'écran, déplaçable, redimensionnable,
+    modifiable, hors de la liste des commentaires mais dans la page."""
+    doc = font_pdf(tmp_path / "r.pdf", rotate=rotation)
     page = doc.doc[0]
-    w = next(w for w in text.page_words(doc, 0) if w[4] == "Ajouté")
-    visual = pymupdf.Rect(w[:4]) * page.rotation_matrix
-    assert visual.width > visual.height  # horizontal à l'écran
+    screen = pymupdf.Rect(100, 300, 400, 330)  # bulle tracée à l'écran
+    xref = A.add_typewriter(doc, 0, screen * page.derotation_matrix, "MMMMMMMMMMMMMMMM",
+                            (0, 0, 0), 14, "moi")
+    pix = doc.render(0, 1)
+    dark = [(x, y) for y in range(290, 340) for x in range(90, 410)
+            if pix.pixel(x, y)[0] < 100]
+    assert max(x for x, _ in dark) - min(x for x, _ in dark) > \
+        3 * (max(y for _, y in dark) - min(y for _, y in dark))  # écrit horizontalement
+    assert [a.kind for a in A.list_annots(doc)] == ["Typewriter"]
+    A.move(doc, 0, xref, 10, 20, "moi")
+    A.resize(doc, 0, xref, pymupdf.Rect(50, 50, 120, 200), "moi")
+    A.update_text_box(doc, 0, xref, "Changé", None, "moi")
+    assert A.text_box(doc, 0, xref) == ("Changé", 14.0, (0.0, 0.0, 0.0))
+    assert A.annot_rect(doc, 0, xref) == pymupdf.Rect(50, 50, 120, 200)
+    for _ in range(4):
+        doc.undo()
+    assert A.list_annots(doc) == []
 
 
 # ----- images --------------------------------------------------------------------------------

@@ -23,6 +23,7 @@ from dataclasses import dataclass
 
 import pymupdf
 
+from pdfmanager.core import fonts
 from pdfmanager.core.document import PdfDocument, pdf_lock
 from pdfmanager.core.text import textpage
 
@@ -163,22 +164,28 @@ def _squash(s: str) -> str:
 
 def _rewrite(doc: PdfDocument, block: TextBlock, lines: list[str], fontname: str,
              buffer: bytes | None) -> bool:
-    """Efface le bloc et le réécrit. Renvoie True si le texte déborde du bloc d'origine."""
+    """Efface et réécrit les lignes modifiées (tout le bloc si le nombre de lignes change :
+    les autres gardent leur police et leur justification d'origine). Renvoie True si le
+    texte déborde du bloc d'origine."""
     first = block.lines[0]
     measure = pymupdf.Font(fontbuffer=buffer) if buffer else pymupdf.Font(fontname)
     overflow = False
+    same = len(lines) == len(block.lines)
+    targets = [k for k, line in enumerate(block.lines)
+               if not same or lines[k] != line.text]
     with doc.edit("Modifier le texte") as d:
         p = d[block.page]
-        for line in block.lines:  # bandes resserrées : ne pas toucher les lignes voisines
-            r, h = line.rect, line.rect.height
+        for k in targets:  # bandes resserrées : ne pas toucher les lignes voisines
+            r, h = block.lines[k].rect, block.lines[k].rect.height
             p.add_redact_annot(pymupdf.Rect(r.x0, r.y0 + h * 0.2, r.x1, r.y1 - h * 0.2))
         p.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE,
                            graphics=pymupdf.PDF_REDACT_LINE_ART_NONE,
                            text=pymupdf.PDF_REDACT_TEXT_REMOVE)
         if buffer is not None:
             p.insert_font(fontname=fontname, fontbuffer=buffer)
-        if len(lines) == len(block.lines):  # même découpage : chaque ligne à sa place
-            for line, s in zip(block.lines, lines, strict=True):
+        if same:  # même découpage : chaque ligne modifiée à sa place
+            for k in targets:
+                line, s = block.lines[k], lines[k]
                 if not s:
                     continue
                 p.insert_text(line.origin, s, fontname=fontname, fontsize=line.size,
@@ -201,8 +208,10 @@ def _rewrite(doc: PdfDocument, block: TextBlock, lines: list[str], fontname: str
         # Relecture : un texte illisible (glyphes absents) annule l'opération.
         area = pymupdf.Rect(block.rect.x0 - 2, block.rect.y0 - 2, p.cropbox.width,
                             p.cropbox.height)
-        written = p.get_text("text", clip=area, textpage=textpage(p, pymupdf.TEXTFLAGS_TEXT))
-        if _squash("".join(lines)) not in _squash(written):
+        written = _squash(p.get_text("text", clip=area,
+                                     textpage=textpage(p, pymupdf.TEXTFLAGS_TEXT)))
+        if not all(_squash(lines[k] if same else "".join(lines)) in written
+                   for k in (targets if same else [0])):
             raise _NotFaithful
     return overflow
 
@@ -212,9 +221,13 @@ def edit_block(doc: PdfDocument, block: TextBlock, new_text: str) -> list[str]:
     lines = [s.rstrip() for s in new_text.split("\n")]
     while len(lines) > 1 and not lines[-1]:
         lines.pop()
-    first = block.lines[0]
+    same = len(lines) == len(block.lines)
+    changed = [k for k, line in enumerate(block.lines) if not same or lines[k] != line.text]
+    if not changed:
+        return []
+    first = block.lines[changed[0]]
     warnings = []
-    if any(line.mixed for line in block.lines):
+    if any(block.lines[k].mixed for k in changed):
         warnings.append("Une ligne mêlait plusieurs styles (gras, couleur, taille…) : le "
                         "style de son premier mot s'applique désormais à toute la ligne.")
     if len(lines) != len(block.lines):
@@ -222,7 +235,14 @@ def edit_block(doc: PdfDocument, block: TextBlock, new_text: str) -> list[str]:
                         "(retours à la ligne et interlignage approximatifs).")
     buffer, status = _original_font(doc, block.page, first.font, new_text)
     sub_name, sub_label = substitute_font(first)
-    attempts = ([("Fedit", buffer, None)] if buffer else []) + [(sub_name, None, sub_label)]
+    attempts = [("Fedit", buffer, None)] if buffer else []
+    installed = fonts.find(first.font)  # la même police, installée sur l'ordinateur
+    if installed:
+        try:
+            attempts.append(("Fsys", fonts.subset(installed, new_text), None))
+        except Exception:  # police que fontTools ne sait pas réduire : on passe
+            pass
+    attempts.append((sub_name, None, sub_label))
     original = first.font.split("+")[-1]
     # Police standard non intégrée (Helvetica, Times…) remplacée par elle-même : rien à dire.
     same_family = status == "absente" and _norm(sub_label.split()[0]) in _norm(original)
@@ -242,18 +262,6 @@ def edit_block(doc: PdfDocument, block: TextBlock, new_text: str) -> list[str]:
         return warnings
     raise ValueError("Ces caractères ne peuvent pas être écrits avec une police standard "
                      "(alphabet latin uniquement).")
-
-
-def add_text(doc: PdfDocument, page: int, point: pymupdf.Point, text: str,
-             fontsize: float = 12, color: Color = (0, 0, 0)) -> None:
-    """Texte ajouté au contenu de la page (pas un commentaire), droit à l'écran ;
-    `point` = coin haut gauche de la première ligne."""
-    with doc.edit("Ajouter du texte") as d:
-        p = d[page]
-        top_left = point * p.rotation_matrix  # repère de l'écran
-        baseline = (top_left + (0, fontsize)) * p.derotation_matrix
-        p.insert_text(baseline, text, fontsize=fontsize, fontname="helv", color=color,
-                      rotate=p.rotation)
 
 
 # ----- images -----------------------------------------------------------------------------

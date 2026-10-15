@@ -24,6 +24,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name="PDFManager",
+    icon=str(root / "packaging" / "pdfmanager.ico"),
     console=False,
     upx=False,
 )

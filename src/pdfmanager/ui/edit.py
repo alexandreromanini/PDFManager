@@ -3,11 +3,13 @@ définitif, nettoyage du document."""
 
 from __future__ import annotations
 
+import re
+import threading
 from pathlib import Path
 
 import pymupdf
 from PySide6.QtCore import QObject, QSettings, QUrl
-from PySide6.QtGui import QAction, QDesktopServices
+from PySide6.QtGui import QAction, QColor, QDesktopServices, QFont
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -19,7 +21,9 @@ from PySide6.QtWidgets import (
     QSpinBox,
 )
 
+from pdfmanager.core import annotations as A
 from pdfmanager.core import editing as E
+from pdfmanager.core import fonts
 from pdfmanager.core import pages as P
 from pdfmanager.core.document import PdfError
 from pdfmanager.ui.icons import icon
@@ -30,6 +34,37 @@ LINK_PROMPT = "Lien vers :\n(adresse web, adresse e-mail ou numéro de page de c
 SIGNED_WARNING = ("\n\nCe document est signé : l'enregistrement réécrira entièrement le fichier "
                   "et les signatures deviendront INVALIDES (sinon l'information retirée "
                   "resterait lisible dans la version signée, conservée dans le fichier).")
+
+
+SANS = ["Helvetica", "Arial", "Liberation Sans", "DejaVu Sans"]
+
+
+def pdf_font(name: str, flags: int, pixels: float) -> QFont:
+    """Police d'écran la plus proche de celle du PDF, pour la saisie sur la page
+    (« ABCDEF+TimesNewRomanPS-BoldMT » → Times New Roman gras)."""
+    base = name.split("+")[-1]
+    family = re.sub(r"(PSMT|MT|PS)$", "", re.split(r"[-,]", base)[0])
+    family = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", family)
+    low = base.lower()
+    font = QFont()
+    mono = flags & 8 or "mono" in low or "courier" in low
+    serif = (flags & 4 or any(k in low for k in ("serif", "times", "roman", "georgia"))) \
+        and "sans" not in low
+    fallback = ["Courier New", "Liberation Mono"] if mono else \
+        ["Times New Roman", "Liberation Serif"] if serif else SANS
+    font.setFamilies([family, *fallback])
+    font.setBold(bool(flags & 16) or any(k in low for k in ("bold", "black", "heavy")))
+    font.setItalic(bool(flags & 2) or "italic" in low or "oblique" in low)
+    font.setPixelSize(max(1, round(pixels)))
+    return font
+
+
+def text_font(points: float, zoom: float) -> QFont:
+    """Helvetica, celle des textes ajoutés et des textes libres."""
+    font = QFont()
+    font.setFamilies(SANS)
+    font.setPixelSize(max(1, round(points * zoom)))
+    return font
 
 
 class CleanDialog(_Dialog):
@@ -92,6 +127,10 @@ class Editor(QObject):
         self.text_size.setToolTip("Taille du texte ajouté")
         self.text_size.setValue(int(self.settings.value("text_size", 12)))
         self.text_size.valueChanged.connect(lambda v: self.settings.setValue("text_size", v))
+        # Index des polices installées préparé dès le choix de l'outil (quelques secondes
+        # sous Windows) : la première modification de texte n'attend pas.
+        tools[Tool.EDIT_TEXT].triggered.connect(lambda: threading.Thread(
+            target=fonts.index, daemon=True).start())
 
     def _with_tab(self, fn) -> None:
         if tab := self.window.current_tab():
@@ -110,11 +149,7 @@ class Editor(QObject):
         if tool is Tool.EDIT_TEXT:
             self.edit_text(tab, page, data)
         elif tool is Tool.ADD_TEXT:
-            txt, ok = QInputDialog.getMultiLineText(self.window, "Ajouter du texte", "Texte :")
-            if ok and txt.strip():
-                rgb = self.window.annotator.color(Tool.ADD_TEXT)
-                tab.apply(E.add_text, page, data, txt, self.text_size.value(),
-                          (rgb.redF(), rgb.greenF(), rgb.blueF()))
+            self.add_text(tab, page, data)
         elif tool in (Tool.ADD_IMAGE, Tool.LINK, Tool.REDACT):
             start, end = data
             rect = pymupdf.Rect(start, end).normalize()
@@ -133,28 +168,55 @@ class Editor(QObject):
                 tab.apply(E.mark_redaction, page, rect)
 
     def edit_text(self, tab, page: int, point: pymupdf.Point) -> None:
+        """Le paragraphe devient modifiable sur place : cadre posé dessus, même police."""
+        status = self.window.statusBar()
         try:
             block = E.text_block_at(tab.doc, page, point)
         except ValueError as e:
-            QMessageBox.warning(self.window, "Modifier le texte", str(e))
+            status.showMessage(str(e), 8000)
             return
         if block is None:
-            self.window.statusBar().showMessage(
-                "Aucun texte ici (page scannée ? Le texte d'une image n'est modifiable "
-                "qu'après OCR).", 6000)
+            status.showMessage("Aucun texte ici (page scannée ? Le texte d'une image n'est "
+                               "modifiable qu'après OCR).", 6000)
             return
         first = block.lines[0]
-        label = (f"Police : {first.font.split('+')[-1]} - {first.size:g} pt\n"
-                 "Si elle ne contient pas les caractères saisis, une police standard proche "
-                 "la remplace (vous serez prévenu).")
-        txt, ok = QInputDialog.getMultiLineText(self.window, "Modifier le texte", label,
-                                                block.text)
-        if not ok or txt == block.text:
-            return
-        warnings = tab.apply(E.edit_block, block, txt)
-        if warnings:
-            QMessageBox.information(self.window, "Texte modifié - à vérifier",
-                                    "\n\n".join(warnings))
+
+        def commit(text: str, _rect) -> None:
+            if text.rstrip() == block.text.rstrip():
+                return
+            warnings = tab.apply(E.edit_block, block, text)
+            if warnings:
+                status.showMessage(" ".join(warnings), 12000)
+
+        tab.view.edit_inline(page, block.rect + (-2, -2, 2, 2), block.text,
+                             pdf_font(first.font, first.flags, first.size * tab.view.zoom),
+                             QColor.fromRgbF(*first.color), wrap=False, opaque=True,
+                             on_commit=commit)
+        status.showMessage("Modifiez le texte, puis cliquez à côté pour valider (Échap pour "
+                           "annuler).", 6000)
+
+    def add_text(self, tab, page: int, data) -> None:
+        """Bulle de texte tracée à la souris (ou d'une ligne, sur un simple clic) : on y
+        écrit directement ; le texte reste ensuite déplaçable et modifiable."""
+        start, end = data
+        size = self.text_size.value()
+        rect = pymupdf.Rect(start, end).normalize()
+        if rect.width < 15 or rect.height < 8:
+            m = tab.doc.text_matrix(page, 1, 0)  # repère de l'écran : bulle droite
+            s = start * m
+            rect = pymupdf.Rect(s, s + (220, size * 1.6)) * ~m
+        color = self.window.annotator.color(Tool.ADD_TEXT)
+        rgb = (color.redF(), color.greenF(), color.blueF())
+
+        def commit(text: str, final: pymupdf.Rect) -> None:
+            if text.strip():
+                xref = tab.apply(A.add_typewriter, page, final, text, rgb, size,
+                                 self.window.annotator.author)
+                if xref:
+                    tab.view.select_annot((page, xref))
+
+        tab.view.edit_inline(page, rect, "", text_font(size, tab.view.zoom), color,
+                             wrap=True, opaque=False, on_commit=commit)
 
     # ----- images ---------------------------------------------------------------------------
 

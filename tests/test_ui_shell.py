@@ -111,3 +111,10 @@ def test_status_messages_become_toasts(qtbot, win):
     win.statusBar().showMessage("Document enregistré")
     assert win.shell.toast.isVisible() and win.shell.toast.text() == "Document enregistré"
     assert not win.statusBar().isVisible()
+
+
+def test_logo(qtbot):
+    from pdfmanager.ui.icons import logo
+
+    assert not logo().isNull() and logo().availableSizes()
+    assert (SRC.parent.parent / "packaging" / "pdfmanager.ico").stat().st_size > 10_000

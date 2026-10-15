@@ -16,6 +16,7 @@ Usage strictement personnel (PyMuPDF est sous AGPL).
 | 5 | Formulaires, signatures | ✅ 0.5.0 |
 | 6 | OCR, compression, conversions, PDF/A | ✅ 0.6.1 |
 | 7 | Refonte visuelle (Windows 11, panneau d'outils, accueil) | ✅ 0.7.0 |
+| 7b | Logo, modifier / ajouter du texte sur la page | ✅ 0.8.0 |
 
 ## Développement (Linux)
 
@@ -117,10 +118,13 @@ Panneau d'outils → **Organiser les pages** (ou menu ⋯ → Pages), ou clic dr
 
 Panneau d'outils → **Modifier le texte et les images** (et **Caviarder**) :
 
-- **Modifier le texte** : cliquer un paragraphe, corriger le texte dans la fenêtre. Même
-  position, taille et couleur ; police d'origine si possible (voir limites).
-- **Ajouter du texte** : cliquer où il doit commencer (taille à droite de la barre, couleur
-  via le bouton couleur de la barre Commenter).
+- **Modifier le texte** : cliquer un paragraphe ; il devient modifiable sur la page, dans
+  un cadre pointillé. Cliquer à côté (ou Ctrl+Entrée) pour valider, Échap pour annuler.
+  Même position, taille et couleur ; seules les lignes changées sont réécrites.
+- **Ajouter du texte** : tracer une bulle (elle s'étire avec la souris) et écrire dedans ;
+  simple clic = bulle d'une ligne. Ensuite : glisser pour déplacer, tirer la poignée (coin
+  bas droit) pour élargir, cliquer dessus pour modifier, la vider pour la supprimer.
+  Taille et couleur : dans le panneau.
 - **Insérer une image…** puis tracer son cadre. **Modifier les images** : cliquer une image,
   la glisser pour la déplacer, tirer sa poignée (coin bas droit) pour la redimensionner
   (proportions conservées), Suppr pour la retirer de la page.
@@ -219,14 +223,19 @@ d'apparence (/AP) : vérifié par un moteur de rendu indépendant (Ghostscript).
   (lisible par extraction). Pour retirer réellement une information : le caviardage.
 - **Modifier le texte** :
   - la plupart des PDF intègrent leurs polices **en sous-ensemble** (seulement les caractères
-    déjà utilisés) : le texte modifié passe alors en **Helvetica / Times / Courier** (gras,
-    italique) le plus proche, et l'application le signale ;
+    déjà utilisés). Si la même police est installée sur l'ordinateur (Calibri, Arial, Times
+    New Roman… pour un document Word), elle est utilisée ; sinon le texte passe en
+    **Helvetica / Times / Courier** (gras, italique) le plus proche, et l'application le
+    signale. Les polices `.ttc` (Cambria, polices asiatiques) ne sont pas reprises ;
   - une ligne qui mêlait plusieurs styles (un mot en gras…) prend le style de son premier mot ;
   - changer le nombre de lignes recompose le paragraphe (retours à la ligne approximatifs) ;
     un texte plus long peut chevaucher le contenu voisin (signalé) ;
   - refusé : texte incliné, polices Type3, pages scannées (texte = image : OCR, phase 6) ;
   - le texte réécrit passe en fin de page dans l'ordre de lecture (copier-coller, lecteurs
     d'écran) ; polices standard = alphabet latin uniquement.
+- **Texte ajouté** : c'est une annotation « machine à écrire » (comme *Remplir et signer*
+  d'Acrobat), en Helvetica (alphabet latin). Les lecteurs PDF l'affichent et l'impriment ;
+  un éditeur qui « aplatit » les annotations l'intègre à la page.
 - **Images** : une image tournée, intégrée dans un groupe, ou affichée plusieurs fois sur la
   même page n'est pas modifiable ; une image déplacée passe au premier plan.
 - **Caviardage** : seul le texte réellement présent est trouvé par la recherche (pas celui
