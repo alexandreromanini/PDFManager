@@ -244,7 +244,15 @@ class PdfDocument:
         def produce() -> bytes:
             # Par défaut tobytes() retire le chiffrement : on le conserve explicitement.
             with pdf_lock:
-                return self.doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_KEEP)
+                data = self.doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_KEEP)
+            # Ramasse-miettes sur une COPIE : sans lui, les objets devenus inutiles (pages
+            # supprimées, image d'avant caviardage…) restent lisibles dans le fichier ; et
+            # sur le document lui-même, il renumérote les objets, ce qui casserait le journal.
+            clean = pymupdf.open("pdf", data)
+            if clean.needs_pass:
+                clean.authenticate(self._password or "")
+            return clean.tobytes(garbage=3, deflate=True,
+                                 encryption=pymupdf.PDF_ENCRYPT_KEEP)
 
         write_atomic(target, produce)
 

@@ -4,6 +4,8 @@ par l'appelant, via les signaux)."""
 
 from __future__ import annotations
 
+import dataclasses
+import math
 from collections import OrderedDict
 from enum import Enum
 
@@ -13,6 +15,7 @@ from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter, QPalette, Q
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsScene, QGraphicsView, QWidget
 
 from pdfmanager.core import annotations as A
+from pdfmanager.core import editing as E
 from pdfmanager.core import text
 from pdfmanager.core.document import PdfDocument
 from pdfmanager.ui.workers import Task
@@ -24,6 +27,8 @@ HIT_COLOR = QColor(255, 210, 0, 110)
 CURRENT_HIT_COLOR = QColor(255, 120, 0, 150)
 SELECTION_COLOR = QColor(0, 120, 215, 90)
 ANNOT_SELECTION_COLOR = QColor(0, 120, 215)
+REDACT_DRAFT_COLOR = QColor(0, 0, 0, 90)
+HANDLE = 10  # côté de la poignée de redimensionnement, en pixels écran
 
 # (page, échelle en pixels physiques, rotation, version du document)
 RenderKey = tuple[int, float, int, int]
@@ -44,11 +49,22 @@ class Tool(Enum):
     INK = "Dessin à main levée"
     STAMP = "Tampon"
     CROP = "Recadrer"  # pas un commentaire : géré par l'organisation des pages
+    EDIT_TEXT = "Modifier le texte"
+    ADD_TEXT = "Ajouter du texte"
+    IMAGES = "Modifier les images"
+    ADD_IMAGE = "Placer l'image"  # activé par « Insérer une image… »
+    LINK = "Lien"
+    REDACT = "Caviarder"
 
 
+COMMENT_TOOLS = (Tool.SELECT, Tool.HAND, Tool.HIGHLIGHT, Tool.UNDERLINE, Tool.STRIKEOUT,
+                 Tool.NOTE, Tool.FREETEXT, Tool.RECT, Tool.ELLIPSE, Tool.LINE, Tool.ARROW,
+                 Tool.INK, Tool.STAMP)
+EDIT_TOOLS = (Tool.EDIT_TEXT, Tool.ADD_TEXT, Tool.IMAGES, Tool.LINK, Tool.REDACT)
 TEXT_TOOLS = {Tool.SELECT, Tool.HIGHLIGHT, Tool.UNDERLINE, Tool.STRIKEOUT}
+CLICK_TOOLS = {Tool.NOTE, Tool.EDIT_TEXT, Tool.ADD_TEXT}
 DRAG_TOOLS = {Tool.FREETEXT, Tool.RECT, Tool.ELLIPSE, Tool.LINE, Tool.ARROW, Tool.STAMP,
-              Tool.CROP}
+              Tool.CROP, Tool.ADD_IMAGE, Tool.LINK, Tool.REDACT}
 
 
 class ViewMode(Enum):
@@ -140,6 +156,8 @@ class PdfView(QGraphicsView):
     annot_selected = Signal(object)  # (page, xref) ou None
     annot_edit_requested = Signal(int, int)  # double-clic : (page, xref)
     annot_moved = Signal(int, int, float, float)  # (page, xref, dx, dy)
+    image_edited = Signal(int, object, object)  # (page, ImageInfo, nouveau Rect)
+    link_activated = Signal(object)  # LinkInfo cliqué avec l'outil Sélection
 
     def __init__(self, doc: PdfDocument, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -160,6 +178,7 @@ class PdfView(QGraphicsView):
         self.tool_width = 2.0
         self._drag: dict | None = None  # tracé en cours (forme, dessin, déplacement)
         self.selected_annot: tuple[int, int, pymupdf.Rect, str] | None = None  # page, xref…
+        self.selected_image: tuple[int, E.ImageInfo] | None = None
         self.selection: list[text.Word] = []
         self._sel_page: int | None = None
         self._sel_start: pymupdf.Point | None = None
@@ -319,6 +338,8 @@ class PdfView(QGraphicsView):
             self.viewport().setCursor(C.IBeamCursor if tool in TEXT_TOOLS else C.CrossCursor)
         if tool is not Tool.SELECT:
             self.select_annot(None)
+        if tool is not Tool.IMAGES:
+            self.selected_image = None
 
     def refresh(self, structural: bool = False) -> None:
         """Après une modification du document : rendus à refaire, annotation à revalider.
@@ -341,6 +362,11 @@ class PdfView(QGraphicsView):
             self.selected_annot = (page, xref, rect, kind) if rect else None
             if rect is None:
                 self.annot_selected.emit(None)
+        if self.selected_image:  # revalidée à son centre (nom ou numéro ont pu changer)
+            page, img = self.selected_image
+            again = E.image_at(self.doc, page, (img.rect.tl + img.rect.br) / 2) if page < n \
+                else None
+            self.selected_image = (page, again) if again else None
         self._relayout()  # tailles de page modifiées (rotation, recadrage…)
 
     def select_annot(self, target: tuple[int, int] | None, *, reveal: bool = False) -> None:
@@ -412,8 +438,48 @@ class PdfView(QGraphicsView):
                 r = r + (d.x, d.y, d.x, d.y)
             painter.setPen(QPen(ANNOT_SELECTION_COLOR, 1.5, Qt.PenStyle.DashLine))
             painter.drawRect(to_qrect(r, m).adjusted(-2, -2, 2, 2))
-        if self._drag and self._drag["page"] == i and self._drag["kind"] != "move":
+        if self.selected_image and self.selected_image[0] == i:
+            r = to_qrect(self._image_preview(), m)
+            painter.setPen(QPen(ANNOT_SELECTION_COLOR, 1.5, Qt.PenStyle.DashLine))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawRect(r)
+            painter.fillRect(QRectF(r.right() - HANDLE / 2, r.bottom() - HANDLE / 2,
+                                    HANDLE, HANDLE), ANNOT_SELECTION_COLOR)
+        if (self._drag and self._drag["page"] == i
+                and self._drag["kind"] not in ("move", "img_move", "img_resize")):
             self._paint_draft(painter, m)
+
+    def _image_preview(self) -> pymupdf.Rect:
+        """Rectangle de l'image sélectionnée, déplacement ou redimensionnement en cours
+        compris (redimensionnement proportionnel depuis le coin opposé à la poignée)."""
+        page, img = self.selected_image
+        drag = self._drag
+        if not drag or drag["kind"] not in ("img_move", "img_resize"):
+            return img.rect
+        if drag["kind"] == "img_move":
+            d = drag["end"] - drag["start"]
+            return img.rect + (d.x, d.y, d.x, d.y)
+        a, pt = drag["anchor"], drag["end"]
+        w, h = img.rect.width, img.rect.height
+        scale = max(abs(pt.x - a.x) / w, abs(pt.y - a.y) / h, 0.05)
+        corner = pymupdf.Point(a.x + math.copysign(w * scale, pt.x - a.x),
+                               a.y + math.copysign(h * scale, pt.y - a.y))
+        return pymupdf.Rect(a, corner).normalize()
+
+    def _on_handle(self, page: int, img: E.ImageInfo, pos) -> pymupdf.Point | None:
+        """Si `pos` est sur la poignée (coin bas droit à l'écran) : coin opposé (ancre)."""
+        m = self.doc.text_matrix(page, self.zoom, self.rotation)
+        r = to_qrect(img.rect, m)
+        local = self.items_[page].mapFromScene(self.mapToScene(pos))
+        if abs(local.x() - r.right()) <= HANDLE and abs(local.y() - r.bottom()) <= HANDLE:
+            return pymupdf.Point(r.left(), r.top()) * ~m  # repère du texte
+        return None
+
+    def _start_image_drag(self, page: int, img: E.ImageInfo, pt: pymupdf.Point, pos) -> None:
+        """Glisser sur la poignée = redimensionner, ailleurs sur l'image = déplacer."""
+        anchor = self._on_handle(page, img, pos)
+        kind = "img_move" if anchor is None else "img_resize"
+        self._drag = {"kind": kind, "page": page, "start": pt, "end": pt, "anchor": anchor}
 
     def _paint_draft(self, painter: QPainter, m: pymupdf.Matrix) -> None:
         """Aperçu du tracé en cours, avant création de l'annotation."""
@@ -430,8 +496,10 @@ class PdfView(QGraphicsView):
             painter.drawLine(QPointF(a.x, a.y), QPointF(b.x, b.y))
         elif self.tool is Tool.ELLIPSE:
             painter.drawEllipse(rect)
+        elif self.tool is Tool.REDACT:
+            painter.fillRect(rect, REDACT_DRAFT_COLOR)
         else:
-            if self.tool in (Tool.FREETEXT, Tool.STAMP, Tool.CROP):
+            if self.tool in (Tool.FREETEXT, Tool.STAMP, Tool.CROP, Tool.ADD_IMAGE, Tool.LINK):
                 pen.setStyle(Qt.PenStyle.DashLine)
                 painter.setPen(pen)
             painter.drawRect(rect)
@@ -505,10 +573,26 @@ class PdfView(QGraphicsView):
                 self.viewport().update()
                 return
             self.select_annot(None)
+            link = E.link_at(self.doc, page, pt)
+            if link:
+                self.link_activated.emit(link)
+                return
+        if self.tool is Tool.IMAGES:
+            pos = event.position().toPoint()
+            current = self.selected_image  # la poignée déborde de l'image : testée d'abord
+            if current and self._on_handle(*current, pos) is not None:
+                self._start_image_drag(*current, self._to_page(current[0], pos), pos)
+                return
+            img = E.image_at(self.doc, page, pt)
+            self.selected_image = (page, img) if img else None
+            if img:
+                self._start_image_drag(page, img, pt, event.position().toPoint())
+            self.viewport().update()
+            return
         if self.tool in TEXT_TOOLS:
             self._sel_page, self._sel_start = page, pt
-        elif self.tool is Tool.NOTE:
-            self.drawn.emit(Tool.NOTE, page, pt)
+        elif self.tool in CLICK_TOOLS:
+            self.drawn.emit(self.tool, page, pt)
         elif self.tool is Tool.INK:
             self._drag = {"kind": "ink", "page": page, "points": [pt]}
         else:
@@ -542,6 +626,15 @@ class PdfView(QGraphicsView):
                 d = drag["end"] - drag["start"]
                 if abs(d.x) + abs(d.y) > 0.5 and self.selected_annot:
                     self.annot_moved.emit(page, self.selected_annot[1], d.x, d.y)
+            elif drag["kind"] in ("img_move", "img_resize") and self.selected_image:
+                self._drag = drag  # pour calculer l'aperçu final
+                new_rect = self._image_preview()
+                self._drag = None
+                img = self.selected_image[1]
+                if max(abs(a - b) for a, b in zip(new_rect, img.rect, strict=True)) > 0.5:
+                    # la sélection suit l'image (refresh la revalide à son nouveau centre)
+                    self.selected_image = (page, dataclasses.replace(img, rect=new_rect))
+                    self.image_edited.emit(page, img, new_rect)
             else:
                 self.drawn.emit(self.tool, page, (drag["start"], drag["end"]))
             self.viewport().update()
@@ -583,6 +676,7 @@ class PdfView(QGraphicsView):
         key = event.key()
         if key == Qt.Key.Key_Escape:  # abandonne le tracé / la sélection en cours
             self._drag, self.selection, self._sel_start = None, [], None
+            self.selected_image = None
             self.select_annot(None)
         elif key in (Qt.Key.Key_PageDown, Qt.Key.Key_Right) and self.mode is ViewMode.SINGLE:
             self.next_page()

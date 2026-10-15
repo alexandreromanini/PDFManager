@@ -11,7 +11,7 @@ Usage strictement personnel (PyMuPDF est sous AGPL).
 | 1 | Lecteur, CI Windows | ✅ 0.1.0 |
 | 2 | Annotations, annuler/rétablir, enregistrement | ✅ 0.2.2 |
 | 3 | Organisation des pages | ✅ 0.3.1 |
-| 4 | Édition, caviardage | — |
+| 4 | Édition, caviardage | ✅ 0.4.0 |
 | 5 | Formulaires, signatures | — |
 | 6 | OCR, compression, conversions, PDF/A | — |
 
@@ -90,6 +90,29 @@ Menu **Pages**, ou clic droit sur les vignettes (Ctrl/Maj+clic pour en sélectio
 - **Fusionner des PDF** (un signet par fichier) et **Scinder** (par plages, toutes les N pages
   ou par signets).
 
+### Modifier
+
+Barre **Modifier** (3ᵉ ligne) ou menu **Modifier** :
+
+- **Modifier le texte** : cliquer un paragraphe, corriger le texte dans la fenêtre. Même
+  position, taille et couleur ; police d'origine si possible (voir limites).
+- **Ajouter du texte** : cliquer où il doit commencer (taille à droite de la barre, couleur
+  via le bouton couleur de la barre Commenter).
+- **Insérer une image…** puis tracer son cadre. **Modifier les images** : cliquer une image,
+  la glisser pour la déplacer, tirer sa poignée (coin bas droit) pour la redimensionner
+  (proportions conservées), Suppr pour la retirer de la page.
+- **Lien** : tracer la zone, puis saisir une adresse web, un e-mail ou un numéro de page.
+  Un simple clic sur un lien existant propose de le supprimer. Avec l'outil Sélection, un clic
+  suit le lien (confirmation avant d'ouvrir une adresse web).
+- **Caviarder** : tracer des zones, ou **Rechercher et caviarder…** un texte dans tout le
+  document ; les zones restent visibles et réversibles jusqu'à **Appliquer les caviardages**,
+  qui retire réellement texte, pixels d'image, tracés et commentaires qui les chevauchent.
+- **Nettoyer le document…** : métadonnées, JavaScript, fichiers joints, miniatures (texte
+  invisible, liens et formulaires en option).
+
+L'enregistrement passe toujours par un nettoyage (ramasse-miettes) : les objets devenus
+inutiles, comme l'image d'origine sous un caviardage, ne restent pas dans le fichier.
+
 Les plages s'écrivent `1-3, 5, 8-` (vide = toutes les pages). Tout est annulable (Ctrl+Z).
 
 `Ctrl+S` demande **une fois par document** la confirmation de remplacer le fichier d'origine
@@ -113,7 +136,22 @@ d'apparence (/AP) : vérifié par un moteur de rendu indépendant (Ghostscript).
 - **Dessin à main levée** : un trait par annotation.
 - L'historique annuler/rétablir est perdu à la fermeture du document.
 - **Recadrer masque, ne supprime pas** : le contenu hors de la zone reste dans le fichier
-  (lisible par extraction). Pour retirer réellement une information : caviardage (phase 4).
+  (lisible par extraction). Pour retirer réellement une information : le caviardage.
+- **Modifier le texte** :
+  - la plupart des PDF intègrent leurs polices **en sous-ensemble** (seulement les caractères
+    déjà utilisés) : le texte modifié passe alors en **Helvetica / Times / Courier** (gras,
+    italique) le plus proche, et l'application le signale ;
+  - une ligne qui mêlait plusieurs styles (un mot en gras…) prend le style de son premier mot ;
+  - changer le nombre de lignes recompose le paragraphe (retours à la ligne approximatifs) ;
+    un texte plus long peut chevaucher le contenu voisin (signalé) ;
+  - refusé : texte incliné, polices Type3, pages scannées (texte = image : OCR, phase 6) ;
+  - le texte réécrit passe en fin de page dans l'ordre de lecture (copier-coller, lecteurs
+    d'écran) ; polices standard = alphabet latin uniquement.
+- **Images** : une image tournée, intégrée dans un groupe, ou affichée plusieurs fois sur la
+  même page n'est pas modifiable ; une image déplacée passe au premier plan.
+- **Caviardage** : seul le texte réellement présent est trouvé par la recherche (pas celui
+  d'une image scannée, sauf après OCR). Appliquer les caviardages retire aussi les
+  commentaires qui chevauchent les zones.
 - **En-têtes, numéros et filigranes** sont écrits dans le contenu des pages : une fois le
   fichier enregistré et fermé, ils ne se modifient ni ne se retirent comme un objet.
   Police Helvetica : alphabet latin (accents français compris), pas de cyrillique ni d'emoji.
@@ -131,9 +169,9 @@ d'apparence (/AP) : vérifié par un moteur de rendu indépendant (Ghostscript).
 ```
 src/pdfmanager/
   core/      logique PDF pure, sans Qt (document + historique annuler/rétablir, texte,
-             annotations, pages)
-  ui/        widgets Qt (fenêtre, vue, panneau latéral, barre Commenter, menu Pages,
-             tâches de fond)
+             annotations, pages, édition)
+  ui/        widgets Qt (fenêtre, vue, panneau latéral, barres Commenter / Modifier,
+             menu Pages, tâches de fond)
   app.py     point d'entrée, journalisation, --selftest
 packaging/   spec PyInstaller, script Inno Setup, build.ps1
 tests/       pytest + pytest-qt (PDF de test générés à la volée)
@@ -150,3 +188,11 @@ tests/       pytest + pytest-qt (PDF de test générés à la volée)
 - **Extraction de texte** sans `get_text()` direct (`core/text.py`) : sur une page tournée, PyMuPDF
   modifie `/Rotate` pendant l'extraction, ce que le journal interdit.
 - Les tests échouent immédiatement si un dialogue modal non prévu s'ouvre (`tests/conftest.py`).
+- **Polices** (`core/editing.py`) : une police en sous-ensemble annonce des glyphes (table Unicode)
+  dont le dessin a été retiré ; la réutilisation n'est décidée qu'après un test d'encre (rendu
+  de chaque caractère), puis le texte écrit est relu.
+- **Images** : `Page.delete_image` remplace l'objet image pour TOUTES les pages ; on retire
+  plutôt l'appel `/ImN Do` du contenu de la page, et on réaffiche le même objet pour déplacer.
+- **Liens** : `get_links()` rend des rectangles dans le repère tourné, `insert_link()` les attend
+  non tournés ; `Page.delete_link` détruit l'objet (non annulable) : on retire seulement la
+  référence de `/Annots`.

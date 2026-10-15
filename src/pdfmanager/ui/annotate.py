@@ -19,11 +19,12 @@ from PySide6.QtWidgets import (
 )
 
 from pdfmanager.core import annotations as A
-from pdfmanager.ui.viewer import PdfView, Tool
+from pdfmanager.ui.viewer import COMMENT_TOOLS, PdfView, Tool
 
 DEFAULT_COLORS = {
     Tool.HIGHLIGHT: "#ffeb3b", Tool.UNDERLINE: "#1e88e5", Tool.STRIKEOUT: "#e53935",
     Tool.NOTE: "#ffd54f", Tool.FREETEXT: "#000000", Tool.INK: "#1e88e5",
+    Tool.ADD_TEXT: "#000000",
 }
 MARKUP_KIND = {Tool.HIGHLIGHT: "Highlight", Tool.UNDERLINE: "Underline",
                Tool.STRIKEOUT: "StrikeOut"}
@@ -52,8 +53,8 @@ class Annotator(QObject):
             a = QAction(tool.value, self)
             a.setCheckable(True)
             a.setData(tool)
-            self.group.addAction(a)  # exclusif avec tous les outils, recadrage compris
-            if tool is not Tool.CROP:  # le recadrage vit dans le menu Pages
+            self.group.addAction(a)  # exclusif avec tous les outils (pages, édition…)
+            if tool in COMMENT_TOOLS:  # les autres vivent dans leurs menus / barres
                 self.toolbar.addAction(a)
             window.addAction(a)  # raccourcis actifs partout dans la fenêtre
             self.actions[tool] = a
@@ -163,8 +164,8 @@ class Annotator(QObject):
     # ----- opérations ---------------------------------------------------------------------
 
     def _on_drawn(self, tab, tool: Tool, page: int, data) -> None:
-        if tool is Tool.CROP:
-            return  # traité par l'organisation des pages
+        if tool not in COMMENT_TOOLS:
+            return  # outils de pages ou d'édition : traités ailleurs
         rgb, width, author = _rgb(self.color(tool)), self.width_spin.value(), self.author
         if tool in MARKUP_KIND:
             tab.apply(A.add_markup, page, MARKUP_KIND[tool], data, rgb, author)

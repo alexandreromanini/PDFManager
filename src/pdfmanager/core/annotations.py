@@ -20,6 +20,7 @@ LABELS = {
     "Highlight": "Surlignage", "Underline": "Soulignement", "StrikeOut": "Texte barré",
     "Text": "Note", "FreeText": "Texte libre", "Square": "Rectangle", "Circle": "Ellipse",
     "Line": "Ligne", "Ink": "Dessin", "Stamp": "Tampon",
+    "Redact": "Caviardage à appliquer",
 }
 MARKUP = {"Highlight": "Surligner", "Underline": "Souligner", "StrikeOut": "Barrer"}
 MOVABLE = {"Text", "FreeText", "Square", "Circle", "Stamp"}  # définis par un simple rectangle
