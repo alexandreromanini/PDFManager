@@ -9,7 +9,7 @@ Usage strictement personnel (PyMuPDF est sous AGPL).
 | Phase | Contenu | État |
 |---|---|---|
 | 1 | Lecteur, CI Windows | ✅ 0.1.0 |
-| 2 | Annotations | — |
+| 2 | Annotations, annuler/rétablir, enregistrement | ✅ 0.2.0 |
 | 3 | Organisation des pages | — |
 | 4 | Édition, caviardage | — |
 | 5 | Formulaires, signatures | — |
@@ -44,21 +44,43 @@ Windows 11 exige ensuite de choisir « Toujours » une fois pour en faire le lec
 Journal : `%APPDATA%\PDFManager\pdfmanager.log` (Linux : `~/.local/share/PDFManager/`),
 accessible via *Aide → Ouvrir le dossier des journaux*.
 
-## Utilisation (phase 1)
+## Utilisation
 
 | Action | Raccourci |
 |---|---|
 | Ouvrir / glisser-déposer des PDF | Ctrl+O |
-| Enregistrer une copie | Ctrl+Maj+S |
+| Enregistrer / Enregistrer sous | Ctrl+S / Ctrl+Maj+S |
+| Annuler / Rétablir | Ctrl+Z / Ctrl+Y |
 | Imprimer | Ctrl+P |
 | Rechercher / suivant / précédent | Ctrl+F, Entrée ou F3 / Maj+F3 |
 | Copier la sélection | Ctrl+C (glisser sur le texte) |
 | Zoom | Ctrl+molette, Ctrl+ +/- |
 | Ajuster largeur / page | Ctrl+2 / Ctrl+0 |
 | Pivoter l'affichage | Ctrl+Maj+- / Ctrl+Maj++ |
-| Outil main | H |
+| Outil sélection / main | V ou Échap / H |
+| Supprimer le commentaire sélectionné | Suppr |
 | Panneau latéral | F4 |
 | Plein écran / présentation | F11 / F5 (Échap pour quitter) |
+
+### Commentaires
+
+Choisir un outil dans la barre **Commenter** (2ᵉ ligne), puis :
+
+- **Surligner / Souligner / Barrer** : glisser sur le texte.
+- **Note** : cliquer à l'endroit voulu, saisir le texte.
+- **Texte libre / Tampon** : tracer un cadre (ou simple clic = taille par défaut).
+- **Rectangle / Ellipse / Ligne / Flèche / Dessin** : glisser.
+- **Sélection** : cliquer un commentaire pour le sélectionner, le glisser pour le déplacer,
+  double-clic pour modifier son texte, Suppr pour l'effacer.
+- Panneau **Commentaires** (barre latérale) : liste par page ; clic = y aller,
+  double-clic = modifier, clic droit = couleur / supprimer.
+- Couleur et épaisseur : boutons à droite de la barre (mémorisés par outil).
+  Auteur : *Commentaires → Nom de l'auteur…* (par défaut : nom de session Windows).
+
+`Ctrl+S` demande **une fois par document** la confirmation de remplacer le fichier d'origine
+(*Enregistrer sous…* pour écrire ailleurs). Fermer un document modifié propose
+Enregistrer / Ne pas enregistrer / Annuler. Les annotations sont écrites avec leur flux
+d'apparence (/AP) : vérifié par un moteur de rendu indépendant (Ghostscript).
 
 ## Limites connues (assumées)
 
@@ -66,7 +88,15 @@ accessible via *Aide → Ouvrir le dossier des journaux*.
   évite de figer l'interface entre deux pages, pas pendant une page de plusieurs secondes
   (plans, cartes). Remède si besoin : rendu dans un processus séparé.
 - **Zoom extrême** : un rendu est plafonné à 40 Mpx ; au-delà (≈ 800 % sur A3) l'image est floue.
-- **Sélection de texte** limitée à une page à la fois.
+- **Sélection de texte et surlignage** limités à une page à la fois.
+- **Tampons** : uniquement les 8 tampons standard PDF ; MuPDF dessine leur libellé **en anglais**
+  (« APPROVED »…). Tampons personnalisés (texte ou image) : non disponibles.
+- **Déplacement** : notes, textes libres, rectangles, ellipses et tampons. Surlignages, lignes et
+  dessins ne se déplacent pas (les supprimer puis les refaire). Pas de redimensionnement.
+- **Pas de réponses** aux commentaires (fils de discussion) ni de statut (accepté/rejeté) :
+  Acrobat les affiche s'ils existent déjà, PDFManager ne les crée pas.
+- **Dessin à main levée** : un trait par annotation.
+- L'historique annuler/rétablir est perdu à la fermeture du document.
 - **Impression** rastérisée à 300 dpi maximum (fidèle, mais fichiers spoule plus lourds).
 - **Chemins longs** (> 260 caractères) gérés pour la lecture/écriture ; les boîtes de dialogue
   Windows elles-mêmes peuvent les refuser si `LongPathsEnabled` n'est pas activé.
@@ -76,8 +106,8 @@ accessible via *Aide → Ouvrir le dossier des journaux*.
 
 ```
 src/pdfmanager/
-  core/      logique PDF pure, sans Qt (document, texte)
-  ui/        widgets Qt (fenêtre, vue, panneau latéral, tâches de fond)
+  core/      logique PDF pure, sans Qt (document + journal annuler/rétablir, texte, annotations)
+  ui/        widgets Qt (fenêtre, vue, panneau latéral, barre Commenter, tâches de fond)
   app.py     point d'entrée, journalisation, --selftest
 packaging/   spec PyInstaller, script Inno Setup, build.ps1
 tests/       pytest + pytest-qt (PDF de test générés à la volée)

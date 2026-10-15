@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 import tempfile
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from functools import cached_property
 from pathlib import Path
 
@@ -53,6 +55,84 @@ class PdfDocument:
             self.doc = pymupdf.open(stream=data, filetype="pdf")
         except (OSError, RuntimeError) as e:  # pymupdf.FileDataError hérite de RuntimeError
             raise PdfError(f"Impossible d'ouvrir « {self.path.name} » :\n{e}") from e
+        self.version = 0  # incrémenté à chaque modification : invalide les rendus en cache
+        self._saved_step = 0
+        self._redo_blocked = False
+
+    # ----- édition : chaque modification est une opération nommée du journal MuPDF -------
+    # Le journal est le pattern commande natif de MuPDF : il enregistre les objets PDF
+    # modifiés par opération, d'où un annuler/rétablir exact sans instantané complet.
+
+    @contextmanager
+    def edit(self, label: str) -> Iterator[pymupdf.Document]:
+        """`with doc.edit("Surligner") as d:` — tout ce qui est fait dans le bloc
+        s'annule d'un seul Ctrl+Z. En cas d'exception, l'opération est défaite."""
+        with pdf_lock:
+            if not self.doc.journal_is_enabled():
+                self.doc.journal_enable()
+            if self._step() < self._saved_step:
+                self._saved_step = -1  # l'état enregistré quitte l'historique
+            before = self._step()
+            self.doc.journal_start_op(label)
+            try:
+                yield self.doc
+            except BaseException:
+                self.doc.journal_stop_op()
+                # Une opération sans aucune modification n'entre pas dans le journal :
+                # annuler sans vérifier déferait l'opération PRÉCÉDENTE.
+                if self._step() > before:
+                    self.doc.journal_undo()
+                    self._redo_blocked = True  # ne jamais « rétablir » une opération partielle
+                self._changed()
+                raise
+            self.doc.journal_stop_op()
+            self._redo_blocked = False
+            self._changed()
+
+    def _step(self) -> int:
+        return self.doc.journal_position()[0] if self.doc.journal_is_enabled() else 0
+
+    def _changed(self) -> None:
+        self.version += 1
+        self.__dict__.pop("_pages", None)  # tailles/rotations de page à relire
+
+    @property
+    def modified(self) -> bool:
+        return self._step() != self._saved_step
+
+    def can_undo(self) -> bool:
+        return self._step() > 0
+
+    def can_redo(self) -> bool:
+        return (bool(self.doc.journal_is_enabled()) and not self._redo_blocked
+                and self.doc.journal_can_do()["redo"])
+
+    def undo_label(self) -> str:
+        return self.doc.journal_op_name(self._step() - 1) if self.can_undo() else ""
+
+    def redo_label(self) -> str:
+        return self.doc.journal_op_name(self._step()) if self.can_redo() else ""
+
+    def undo(self) -> None:
+        if self.can_undo():
+            with pdf_lock:
+                self.doc.journal_undo()
+            self._redo_blocked = False
+            self._changed()
+
+    def redo(self) -> None:
+        if self.can_redo():
+            with pdf_lock:
+                self.doc.journal_redo()
+            self._changed()
+
+    def save(self, target: str | os.PathLike[str] | None = None) -> None:
+        """Enregistre (atomiquement) vers `target` ou le fichier courant, qui devient le
+        fichier du document. La confirmation d'écrasement relève de l'interface."""
+        target = Path(target or self.path).absolute()
+        self.save_atomic(target)
+        self.path = target
+        self._saved_step = self._step()
 
     @property
     def needs_password(self) -> bool:

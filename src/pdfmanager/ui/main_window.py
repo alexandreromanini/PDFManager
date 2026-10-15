@@ -37,6 +37,7 @@ from PySide6.QtWidgets import (
 from pdfmanager import __version__
 from pdfmanager.core import text
 from pdfmanager.core.document import PdfDocument, PdfError
+from pdfmanager.ui.annotate import Annotator
 from pdfmanager.ui.sidebar import Sidebar
 from pdfmanager.ui.viewer import FitMode, PdfView, PresentationView, ViewMode, to_qimage
 from pdfmanager.ui.workers import Task
@@ -72,6 +73,7 @@ class DocumentTab(QSplitter):
     """Un document ouvert : panneau latéral + vue + état de recherche."""
 
     status = Signal(str)
+    modified_changed = Signal()
 
     def __init__(self, doc: PdfDocument) -> None:
         super().__init__(Qt.Orientation.Horizontal)
@@ -81,9 +83,10 @@ class DocumentTab(QSplitter):
         self.addWidget(self.sidebar)
         self.addWidget(self.view)
         self.setStretchFactor(1, 1)
-        self.setSizes([170, 900])
+        self.setSizes([250, 900])
         self.sidebar.page_requested.connect(self.view.go_to_page)
         self.view.page_changed.connect(self.sidebar.set_current)
+        self.overwrite_confirmed = False  # l'utilisateur a accepté d'écraser le fichier
 
         self.query = ""
         self.results: list[tuple[int, pymupdf.Rect]] = []
@@ -92,6 +95,20 @@ class DocumentTab(QSplitter):
         self._search_task: Task | None = None
         self._search_pool = QThreadPool(self)
         self._search_pool.setMaxThreadCount(1)
+
+    def changed(self) -> None:
+        """Après toute modification (édition, annuler, rétablir) : tout se redessine."""
+        self.view.refresh()
+        self.sidebar.refresh()
+        self.modified_changed.emit()
+
+    def undo(self) -> None:
+        self.doc.undo()
+        self.changed()
+
+    def redo(self) -> None:
+        self.doc.redo()
+        self.changed()
 
     def search(self, query: str) -> None:
         if query == self.query and self.results:
@@ -148,8 +165,10 @@ class MainWindow(QMainWindow):
         self.tabs.setMovable(True)
         self.tabs.tabCloseRequested.connect(self.close_tab)
         self.tabs.currentChanged.connect(self._sync)
+        self.tabs.currentChanged.connect(lambda: self.annotator.activate(self.current_tab()))
         self.setCentralWidget(self.tabs)
 
+        self.annotator = Annotator(self)
         self._build_ui()
         self.apply_theme(self.settings.value("theme", "system"))
         if geometry := self.settings.value("geometry"):
@@ -174,8 +193,16 @@ class MainWindow(QMainWindow):
     def _build_ui(self) -> None:
         T, K = QIcon.ThemeIcon, QKeySequence.StandardKey
         self.act_open = self._act("&Ouvrir…", self.open_dialog, K.Open, T.DocumentOpen)
-        self.act_save_copy = self._act("Enregistrer une &copie sous…", self.save_copy, K.SaveAs,
-                                       T.DocumentSaveAs)
+        self.act_save = self._act("&Enregistrer", lambda: self.save(), K.Save, T.DocumentSave)
+        self.act_save_as = self._act("Enregistrer &sous…", lambda: self.save_as(), K.SaveAs,
+                                     T.DocumentSaveAs)
+        self.act_save_copy = self._act("Enregistrer une &copie…", self.save_copy)
+        self.act_undo = self._act("Annuler", lambda: self._tab_do(DocumentTab.undo), K.Undo,
+                                  T.EditUndo)
+        self.act_redo = self._act("Rétablir", lambda: self._tab_do(DocumentTab.redo), K.Redo,
+                                  T.EditRedo)
+        self.act_delete_annot = self._act("Supprimer le commentaire",
+                                          self.annotator.delete_selected, K.Delete, T.EditDelete)
         self.act_print = self._act("&Imprimer…", self.print_document, K.Print, T.DocumentPrint)
         self.act_close = self._act("&Fermer l'onglet", lambda: self.close_tab(
             self.tabs.currentIndex()), K.Close)
@@ -202,8 +229,6 @@ class MainWindow(QMainWindow):
             lambda v: v.rotate(-90)), "Ctrl+Shift+-", T.ObjectRotateLeft)
         self.act_rot_right = self._act("Pivoter l'affichage à droite", lambda: self._view_do(
             lambda v: v.rotate(90)), "Ctrl+Shift++", T.ObjectRotateRight)
-        self.act_hand = self._act("Outil main", lambda on: self._view_do(
-            lambda v: v.set_select_mode(not on)), "H", checkable=True)
         self.act_sidebar = self._act("Panneau latéral", self._toggle_sidebar, "F4",
                                      checkable=True)
         self.act_sidebar.setChecked(True)
@@ -216,6 +241,8 @@ class MainWindow(QMainWindow):
         m.addAction(self.act_open)
         self.recent_menu = m.addMenu("Fichiers &récents")
         self.recent_menu.aboutToShow.connect(self._fill_recent)
+        m.addAction(self.act_save)
+        m.addAction(self.act_save_as)
         m.addAction(self.act_save_copy)
         m.addSeparator()
         m.addAction(self.act_print)
@@ -224,6 +251,9 @@ class MainWindow(QMainWindow):
         m.addAction(act_quit)
 
         m = bar.addMenu("&Édition")
+        m.addAction(self.act_undo)
+        m.addAction(self.act_redo)
+        m.addSeparator()
         for a in (self.act_copy, self.act_find, self.act_find_next, self.act_find_prev):
             m.addAction(a)
 
@@ -242,7 +272,6 @@ class MainWindow(QMainWindow):
         m.addAction(self.act_rot_left)
         m.addAction(self.act_rot_right)
         m.addSeparator()
-        m.addAction(self.act_hand)
         m.addAction(self.act_sidebar)
         m.addAction(self.act_fullscreen)
         m.addAction(self.act_present)
@@ -256,6 +285,13 @@ class MainWindow(QMainWindow):
             self.theme_group.addAction(a)
         self.theme_group.triggered.connect(lambda a: self.apply_theme(a.data()))
 
+        m = bar.addMenu("&Commentaires")
+        for tool_action in self.annotator.actions.values():
+            m.addAction(tool_action)
+        m.addSeparator()
+        m.addAction(self.act_delete_annot)
+        m.addAction("Nom de l'auteur…", self.annotator.ask_author)
+
         m = bar.addMenu("&Aide")
         m.addAction("Ouvrir le dossier des journaux", self.open_log_dir)
         m.addAction("À propos", lambda: QMessageBox.about(
@@ -264,7 +300,10 @@ class MainWindow(QMainWindow):
         tb = self.addToolBar("Principale")
         tb.setObjectName("main_toolbar")
         tb.addAction(self.act_open)
+        tb.addAction(self.act_save)
         tb.addAction(self.act_print)
+        tb.addAction(self.act_undo)
+        tb.addAction(self.act_redo)
         tb.addSeparator()
         tb.addAction(self.act_prev)
         self.page_spin = QSpinBox()
@@ -289,7 +328,6 @@ class MainWindow(QMainWindow):
         tb.addSeparator()
         tb.addAction(self.act_rot_left)
         tb.addAction(self.act_rot_right)
-        tb.addAction(self.act_hand)
         tb.addSeparator()
         self.search_edit = QLineEdit()
         self.search_edit.setPlaceholderText("Rechercher… (Entrée = suivant)")
@@ -298,6 +336,9 @@ class MainWindow(QMainWindow):
         self.search_edit.returnPressed.connect(
             lambda: self._tab_do(lambda t: t.search(self.search_edit.text().strip())))
         tb.addWidget(self.search_edit)
+
+        self.addToolBarBreak()
+        self.addToolBar(self.annotator.toolbar)
 
     # ----- accès à l'onglet courant -------------------------------------------------------
 
@@ -315,19 +356,29 @@ class MainWindow(QMainWindow):
 
     def _sync(self, *_) -> None:
         tab = self.current_tab()
-        for a in (self.act_save_copy, self.act_print, self.act_close, self.act_copy,
-                  self.act_find, self.act_prev, self.act_next, self.act_zoom_in,
-                  self.act_zoom_out, self.act_fit_width, self.act_fit_page, self.act_rot_left,
-                  self.act_rot_right, self.act_hand, self.act_present):
+        for a in (self.act_save, self.act_save_as, self.act_save_copy, self.act_print,
+                  self.act_close, self.act_copy, self.act_find, self.act_prev, self.act_next,
+                  self.act_zoom_in, self.act_zoom_out, self.act_fit_width, self.act_fit_page,
+                  self.act_rot_left, self.act_rot_right, self.act_present,
+                  self.act_delete_annot):
             a.setEnabled(tab is not None)
-        for w in (self.page_spin, self.zoom_combo, self.search_edit):
+        for w in (self.page_spin, self.zoom_combo, self.search_edit, self.annotator.toolbar):
             w.setEnabled(tab is not None)
+        for i in range(self.tabs.count()):
+            t = self.tabs.widget(i)
+            self.tabs.setTabText(i, t.doc.path.name + (" *" if t.doc.modified else ""))
+        undo, redo = (tab.doc.undo_label(), tab.doc.redo_label()) if tab else ("", "")
+        self.act_undo.setEnabled(bool(undo))
+        self.act_undo.setText(f"Annuler « {undo} »" if undo else "Annuler")
+        self.act_redo.setEnabled(bool(redo))
+        self.act_redo.setText(f"Rétablir « {redo} »" if redo else "Rétablir")
         if tab is None:
             self.setWindowTitle("PDFManager")
             self.page_label.setText(" / 0 ")
             return
         v = tab.view
-        self.setWindowTitle(f"{tab.doc.path.name} — PDFManager")
+        star = " *" if tab.doc.modified else ""
+        self.setWindowTitle(f"{tab.doc.path.name}{star} — PDFManager")
         self.page_spin.blockSignals(True)
         self.page_spin.setRange(1, tab.doc.page_count)
         self.page_spin.setValue(v.current_page + 1)
@@ -336,7 +387,6 @@ class MainWindow(QMainWindow):
         self.zoom_combo.setEditText(f"{round(v.zoom * 100)} %")
         for a in self.mode_group.actions():
             a.setChecked(a.data() is v.mode)
-        self.act_hand.setChecked(not v.select_mode)
 
     # ----- fichiers -----------------------------------------------------------------------
 
@@ -365,6 +415,8 @@ class MainWindow(QMainWindow):
         tab.status.connect(self.statusBar().showMessage)
         tab.view.page_changed.connect(self._sync)
         tab.view.zoom_changed.connect(self._sync)
+        tab.modified_changed.connect(self._sync)
+        self.annotator.attach(tab)
         i = self.tabs.addTab(tab, path.name)
         self.tabs.setTabToolTip(i, str(path))
         self.tabs.setCurrentIndex(i)
@@ -386,12 +438,72 @@ class MainWindow(QMainWindow):
         QMessageBox.warning(self, "Mot de passe", "Trois essais infructueux.")
         return False
 
-    def close_tab(self, index: int) -> None:
+    def close_tab(self, index: int) -> bool:
         if index < 0:
-            return
+            return False
         tab = self.tabs.widget(index)
+        if not self._maybe_discard(tab):
+            return False
         self.tabs.removeTab(index)
         tab.deleteLater()  # les QThreadPool enfants attendent la fin des rendus en cours
+        return True
+
+    def _maybe_discard(self, tab: DocumentTab) -> bool:
+        """True si l'onglet peut être fermé (rien à enregistrer, enregistré, ou abandonné)."""
+        if not tab.doc.modified:
+            return True
+        self.tabs.setCurrentWidget(tab)
+        B = QMessageBox.StandardButton
+        answer = QMessageBox.question(
+            self, "Modifications non enregistrées",
+            f"« {tab.doc.path.name} » a été modifié. Enregistrer les modifications ?",
+            B.Save | B.Discard | B.Cancel, B.Save)
+        if answer == B.Save:
+            tab.overwrite_confirmed = True  # « Enregistrer » vaut confirmation
+            return self.save(tab)
+        return answer == B.Discard
+
+    def save(self, tab: DocumentTab | None = None) -> bool:
+        tab = tab or self.current_tab()
+        if tab is None:
+            return False
+        if not tab.overwrite_confirmed:
+            B = QMessageBox.StandardButton
+            if QMessageBox.question(
+                    self, "Enregistrer",
+                    f"Enregistrer dans « {tab.doc.path.name} » ?\n"
+                    "Le fichier d'origine sera remplacé (Enregistrer sous… pour une copie).",
+                    B.Save | B.Cancel, B.Save) != B.Save:
+                return False
+            tab.overwrite_confirmed = True
+        return self._write(tab, None)
+
+    def save_as(self, tab: DocumentTab | None = None) -> bool:
+        tab = tab or self.current_tab()
+        if tab is None:
+            return False
+        target, _ = QFileDialog.getSaveFileName(self, "Enregistrer sous", str(tab.doc.path),
+                                                PDF_FILTER)  # le dialogue confirme l'écrasement
+        if not target:
+            return False
+        if not self._write(tab, Path(target)):
+            return False
+        tab.overwrite_confirmed = True
+        self.tabs.setTabToolTip(self.tabs.indexOf(tab), str(tab.doc.path))
+        self._add_recent(tab.doc.path)
+        return True
+
+    def _write(self, tab: DocumentTab, target: Path | None) -> bool:
+        try:
+            tab.doc.save(target)
+        except (OSError, RuntimeError) as e:
+            log.exception("Échec d'enregistrement de %s", target or tab.doc.path)
+            QMessageBox.critical(self, "Enregistrement impossible", str(e))
+            return False
+        log.info("Enregistré : %s", tab.doc.path)
+        self.statusBar().showMessage(f"Enregistré : {tab.doc.path}", 5000)
+        self._sync()
+        return True
 
     def save_copy(self) -> None:
         tab = self.current_tab()
@@ -535,5 +647,9 @@ class MainWindow(QMainWindow):
                 self.open_path(url.toLocalFile())
 
     def closeEvent(self, event) -> None:
+        for i in range(self.tabs.count()):
+            if not self._maybe_discard(self.tabs.widget(i)):
+                event.ignore()
+                return
         self.settings.setValue("geometry", self.saveGeometry())
         super().closeEvent(event)

@@ -1,4 +1,6 @@
-"""Affichage des pages : rendu asynchrone, cache, zoom, rotation, modes, sélection, recherche."""
+"""Affichage des pages : rendu asynchrone, cache, zoom, rotation, modes, sélection,
+recherche, et saisie des annotations à la souris (la création elle-même est faite
+par l'appelant, via les signaux)."""
 
 from __future__ import annotations
 
@@ -7,9 +9,10 @@ from enum import Enum
 
 import pymupdf
 from PySide6.QtCore import QPointF, QRectF, QSizeF, Qt, QThreadPool, Signal
-from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter, QPalette
+from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter, QPalette, QPen, QPolygonF
 from PySide6.QtWidgets import QGraphicsItem, QGraphicsScene, QGraphicsView, QWidget
 
+from pdfmanager.core import annotations as A
 from pdfmanager.core import text
 from pdfmanager.core.document import PdfDocument
 from pdfmanager.ui.workers import Task
@@ -20,8 +23,30 @@ ZOOM_STEPS = (0.1, 0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 3.0, 4.0, 6.0, 8.0)
 HIT_COLOR = QColor(255, 210, 0, 110)
 CURRENT_HIT_COLOR = QColor(255, 120, 0, 150)
 SELECTION_COLOR = QColor(0, 120, 215, 90)
+ANNOT_SELECTION_COLOR = QColor(0, 120, 215)
 
-RenderKey = tuple[int, float, int]  # (page, échelle en pixels physiques, rotation)
+# (page, échelle en pixels physiques, rotation, version du document)
+RenderKey = tuple[int, float, int, int]
+
+
+class Tool(Enum):
+    SELECT = "Sélection"
+    HAND = "Main"
+    HIGHLIGHT = "Surligner"
+    UNDERLINE = "Souligner"
+    STRIKEOUT = "Barrer"
+    NOTE = "Note"
+    FREETEXT = "Texte libre"
+    RECT = "Rectangle"
+    ELLIPSE = "Ellipse"
+    LINE = "Ligne"
+    ARROW = "Flèche"
+    INK = "Dessin à main levée"
+    STAMP = "Tampon"
+
+
+TEXT_TOOLS = {Tool.SELECT, Tool.HIGHLIGHT, Tool.UNDERLINE, Tool.STRIKEOUT}
+DRAG_TOOLS = {Tool.FREETEXT, Tool.RECT, Tool.ELLIPSE, Tool.LINE, Tool.ARROW, Tool.STAMP}
 
 
 class ViewMode(Enum):
@@ -47,13 +72,13 @@ def to_qrect(rect: pymupdf.Rect, m: pymupdf.Matrix) -> QRectF:
 
 
 def _render(task: Task, doc: PdfDocument, key: RenderKey) -> tuple[RenderKey, QImage]:
-    index, scale, rotation = key
+    index, scale, rotation, _version = key
     return key, to_qimage(doc.render(index, scale, rotation))
 
 
 class ImageCache:
-    """LRU borné en octets. Garde aussi les anciens zooms : ils servent d'aperçu flou
-    pendant le rendu du nouveau zoom (rendu progressif)."""
+    """LRU borné en octets. Garde aussi les anciens zooms et versions : ils servent
+    d'aperçu pendant le rendu du nouveau (pas de page blanche qui clignote)."""
 
     def __init__(self, budget: int = 300 * 2**20) -> None:
         self.budget, self.size = budget, 0
@@ -80,7 +105,7 @@ class ImageCache:
             self.size -= self._items.popitem(last=False)[1].sizeInBytes()
 
     def any_for_page(self, index: int, rotation: int) -> QImage | None:
-        for (i, _, rot), img in reversed(self._items.items()):
+        for (i, _, rot, _), img in reversed(self._items.items()):
             if i == index and rot == rotation:
                 return img
         return None
@@ -106,6 +131,12 @@ class PageItem(QGraphicsItem):
 class PdfView(QGraphicsView):
     page_changed = Signal(int)
     zoom_changed = Signal(float)
+    # (outil, page, données) — données selon l'outil : mots (marquage), Point (note),
+    # (Point, Point) (formes, texte libre, tampon), [Point] (dessin)
+    drawn = Signal(object, int, object)
+    annot_selected = Signal(object)  # (page, xref) ou None
+    annot_edit_requested = Signal(int, int)  # double-clic : (page, xref)
+    annot_moved = Signal(int, int, float, float)  # (page, xref, dx, dy)
 
     def __init__(self, doc: PdfDocument, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -121,7 +152,11 @@ class PdfView(QGraphicsView):
 
         self.hits: dict[int, list[pymupdf.Rect]] = {}
         self.current_hit: tuple[int, pymupdf.Rect] | None = None
-        self.select_mode = True
+        self.tool = Tool.SELECT
+        self.tool_color = QColor("red")
+        self.tool_width = 2.0
+        self._drag: dict | None = None  # tracé en cours (forme, dessin, déplacement)
+        self.selected_annot: tuple[int, int, pymupdf.Rect, str] | None = None  # page, xref…
         self.selection: list[text.Word] = []
         self._sel_page: int | None = None
         self._sel_start: pymupdf.Point | None = None
@@ -271,17 +306,52 @@ class PdfView(QGraphicsView):
         self.rotation = (self.rotation + delta) % 360
         self._relayout()
 
-    def set_select_mode(self, on: bool) -> None:
-        self.select_mode = on
-        mode = QGraphicsView.DragMode.NoDrag if on else QGraphicsView.DragMode.ScrollHandDrag
-        self.setDragMode(mode)
-        if on:
-            self.viewport().setCursor(Qt.CursorShape.IBeamCursor)
+    def set_tool(self, tool: Tool) -> None:
+        self.tool, self._drag = tool, None
+        hand = tool is Tool.HAND
+        self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag if hand
+                         else QGraphicsView.DragMode.NoDrag)
+        if not hand:
+            C = Qt.CursorShape
+            self.viewport().setCursor(C.IBeamCursor if tool in TEXT_TOOLS else C.CrossCursor)
+        if tool is not Tool.SELECT:
+            self.select_annot(None)
+
+    def refresh(self) -> None:
+        """Après une modification du document : rendus à refaire, annotation à revalider."""
+        self._words.clear()
+        if self.selected_annot:
+            page, xref, _, kind = self.selected_annot
+            rect = A.annot_rect(self.doc, page, xref)
+            self.selected_annot = (page, xref, rect, kind) if rect else None
+            if rect is None:
+                self.annot_selected.emit(None)
+        self.viewport().update()
+
+    def select_annot(self, target: tuple[int, int] | None, *, reveal: bool = False) -> None:
+        """Sélectionne l'annotation (page, xref), ou désélectionne avec None."""
+        self.selected_annot = None
+        if target:
+            page, xref = target
+            info = next((a for a in A.list_annots(self.doc)
+                         if a.page == page and a.xref == xref), None)
+            if info:
+                self.selected_annot = (page, xref, info.rect, info.kind)
+                if reveal:
+                    if self.mode is ViewMode.SINGLE and page != self.current_page:
+                        self.go_to_page(page)
+                    r = to_qrect(info.rect, self.doc.text_matrix(page, self.zoom, self.rotation))
+                    self.ensureVisible(r.translated(self.items_[page].pos()), 80, 80)
+        self.annot_selected.emit(self.selected_annot[:2] if self.selected_annot else None)
+        self.viewport().update()
 
     # ----- rendu --------------------------------------------------------------------------
 
+    def _key(self, index: int, scale: float) -> RenderKey:
+        return (index, round(scale, 3), self.rotation, self.doc.version)
+
     def _request(self, index: int, scale: float, priority: int = 1) -> None:
-        key = (index, round(scale, 3), self.rotation)
+        key = self._key(index, scale)
         if key in self._pending or key in self.cache:
             return
         self._pending.add(key)
@@ -298,7 +368,7 @@ class PdfView(QGraphicsView):
     def paint_page(self, item: PageItem, painter: QPainter) -> None:
         i, rect = item.index, item.boundingRect()
         scale = self.zoom * self.devicePixelRatioF()
-        img = self.cache.get((i, round(scale, 3), self.rotation))
+        img = self.cache.get(self._key(i, scale))
         if img is None:
             self._request(i, scale)
             img = self.cache.any_for_page(i, self.rotation)
@@ -317,6 +387,36 @@ class PdfView(QGraphicsView):
         if self._sel_page == i:
             for w in self.selection:
                 painter.fillRect(to_qrect(pymupdf.Rect(w[:4]), m), SELECTION_COLOR)
+        if self.selected_annot and self.selected_annot[0] == i:
+            r = self.selected_annot[2]
+            if self._drag and self._drag["kind"] == "move":
+                d = self._drag["end"] - self._drag["start"]
+                r = r + (d.x, d.y, d.x, d.y)
+            painter.setPen(QPen(ANNOT_SELECTION_COLOR, 1.5, Qt.PenStyle.DashLine))
+            painter.drawRect(to_qrect(r, m).adjusted(-2, -2, 2, 2))
+        if self._drag and self._drag["page"] == i and self._drag["kind"] != "move":
+            self._paint_draft(painter, m)
+
+    def _paint_draft(self, painter: QPainter, m: pymupdf.Matrix) -> None:
+        """Aperçu du tracé en cours, avant création de l'annotation."""
+        pen = QPen(self.tool_color, max(1.0, self.tool_width * self.zoom))
+        painter.setPen(pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        if self.tool is Tool.INK:
+            pts = [p * m for p in self._drag["points"]]
+            painter.drawPolyline(QPolygonF([QPointF(p.x, p.y) for p in pts]))
+            return
+        a, b = self._drag["start"] * m, self._drag["end"] * m
+        rect = QRectF(QPointF(a.x, a.y), QPointF(b.x, b.y)).normalized()
+        if self.tool in (Tool.LINE, Tool.ARROW):
+            painter.drawLine(QPointF(a.x, a.y), QPointF(b.x, b.y))
+        elif self.tool is Tool.ELLIPSE:
+            painter.drawEllipse(rect)
+        else:
+            if self.tool in (Tool.FREETEXT, Tool.STAMP):
+                pen.setStyle(Qt.PenStyle.DashLine)
+                painter.setPen(pen)
+            painter.drawRect(rect)
 
     def drawBackground(self, painter: QPainter, rect: QRectF) -> None:
         painter.fillRect(rect, self.palette().color(QPalette.ColorRole.Dark))
@@ -338,15 +438,18 @@ class PdfView(QGraphicsView):
         self.ensureVisible(r.translated(item.pos()), 80, 80)
         self.viewport().update()
 
-    # ----- sélection de texte -------------------------------------------------------------
+    # ----- souris : sélection de texte, outils d'annotation --------------------------------
+
+    def _to_page(self, index: int, pos) -> pymupdf.Point:
+        """Position écran → coordonnées texte de la page `index` (même hors de la page)."""
+        lp = self.items_[index].mapFromScene(self.mapToScene(pos))
+        return pymupdf.Point(lp.x(), lp.y()) * ~self.doc.text_matrix(index, self.zoom,
+                                                                      self.rotation)
 
     def _page_point(self, pos) -> tuple[int, pymupdf.Point] | None:
-        sp = self.mapToScene(pos)
-        for item in self.scene().items(sp):
+        for item in self.scene().items(self.mapToScene(pos)):
             if isinstance(item, PageItem):
-                lp = item.mapFromScene(sp)
-                inv = ~self.doc.text_matrix(item.index, self.zoom, self.rotation)
-                return item.index, pymupdf.Point(lp.x(), lp.y()) * inv
+                return item.index, self._to_page(item.index, pos)
         return None
 
     def words(self, index: int) -> list[text.Word]:
@@ -364,26 +467,79 @@ class PdfView(QGraphicsView):
         return True
 
     def mousePressEvent(self, event) -> None:
-        if self.select_mode and event.button() == Qt.MouseButton.LeftButton:
-            hit = self._page_point(event.position().toPoint())
-            self.selection = []
-            self._sel_page, self._sel_start = hit if hit else (None, None)
-            self.viewport().update()
+        if self.tool is Tool.HAND or event.button() != Qt.MouseButton.LeftButton:
+            super().mousePressEvent(event)
             return
-        super().mousePressEvent(event)
+        hit = self._page_point(event.position().toPoint())
+        self.selection, self._sel_page, self._sel_start = [], None, None
+        if hit is None:
+            self.select_annot(None)
+            return
+        page, pt = hit
+        if self.tool is Tool.SELECT:
+            found = A.find_at(self.doc, page, pt)
+            if found:
+                xref, kind, rect = found
+                self.selected_annot = (page, xref, rect, kind)
+                self.annot_selected.emit((page, xref))
+                if kind in A.MOVABLE:
+                    self._drag = {"kind": "move", "page": page, "start": pt, "end": pt}
+                self.viewport().update()
+                return
+            self.select_annot(None)
+        if self.tool in TEXT_TOOLS:
+            self._sel_page, self._sel_start = page, pt
+        elif self.tool is Tool.NOTE:
+            self.drawn.emit(Tool.NOTE, page, pt)
+        elif self.tool is Tool.INK:
+            self._drag = {"kind": "ink", "page": page, "points": [pt]}
+        else:
+            self._drag = {"kind": "shape", "page": page, "start": pt, "end": pt}
+        self.viewport().update()
 
     def mouseMoveEvent(self, event) -> None:
-        if self.select_mode and self._sel_start is not None:
-            hit = self._page_point(event.position().toPoint())
-            if hit and hit[0] == self._sel_page:  # ponytail: sélection limitée à une page
-                self.selection = text.select_words(self.words(hit[0]), self._sel_start, hit[1])
-                self.viewport().update()
-            return
-        super().mouseMoveEvent(event)
+        pos = event.position().toPoint()
+        if self._drag:
+            pt = self._to_page(self._drag["page"], pos)
+            if self._drag["kind"] == "ink":
+                self._drag["points"].append(pt)
+            else:
+                self._drag["end"] = pt
+            self.viewport().update()
+        elif self._sel_start is not None:  # ponytail: sélection limitée à la page de départ
+            pt = self._to_page(self._sel_page, pos)
+            self.selection = text.select_words(self.words(self._sel_page), self._sel_start, pt)
+            self.viewport().update()
+        else:
+            super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event) -> None:
+        drag, self._drag = self._drag, None
+        if drag:
+            page = drag["page"]
+            if drag["kind"] == "ink":
+                if len(drag["points"]) > 1:
+                    self.drawn.emit(Tool.INK, page, drag["points"])
+            elif drag["kind"] == "move":
+                d = drag["end"] - drag["start"]
+                if abs(d.x) + abs(d.y) > 0.5 and self.selected_annot:
+                    self.annot_moved.emit(page, self.selected_annot[1], d.x, d.y)
+            else:
+                self.drawn.emit(self.tool, page, (drag["start"], drag["end"]))
+            self.viewport().update()
+        elif self._sel_start is not None and self.tool not in (Tool.SELECT, Tool.HAND):
+            if self.selection:  # outil de marquage : la sélection devient l'annotation
+                self.drawn.emit(self.tool, self._sel_page, self.selection)
+            self.selection = []
+            self.viewport().update()
         self._sel_start = None
         super().mouseReleaseEvent(event)
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        if self.tool is Tool.SELECT and self.selected_annot:
+            self.annot_edit_requested.emit(*self.selected_annot[:2])
+            return
+        super().mouseDoubleClickEvent(event)
 
     # ----- événements ---------------------------------------------------------------------
 
@@ -407,7 +563,10 @@ class PdfView(QGraphicsView):
 
     def keyPressEvent(self, event) -> None:
         key = event.key()
-        if key in (Qt.Key.Key_PageDown, Qt.Key.Key_Right) and self.mode is ViewMode.SINGLE:
+        if key == Qt.Key.Key_Escape:  # abandonne le tracé / la sélection en cours
+            self._drag, self.selection, self._sel_start = None, [], None
+            self.select_annot(None)
+        elif key in (Qt.Key.Key_PageDown, Qt.Key.Key_Right) and self.mode is ViewMode.SINGLE:
             self.next_page()
         elif key in (Qt.Key.Key_PageUp, Qt.Key.Key_Left) and self.mode is ViewMode.SINGLE:
             self.previous_page()
