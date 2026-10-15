@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pdfmanager"
+dynamic = ["version"]
+description = "Lecteur et éditeur PDF personnel (PySide6 + PyMuPDF)"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = "AGPL-3.0-or-later"
+dependencies = [
+    # Essentials suffit (QtWidgets, QtGui, QtPrintSupport) et évite ~500 Mo de WebEngine.
+    "PySide6-Essentials>=6.8",
+    "PyMuPDF>=1.26",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-qt>=4.4", "ruff>=0.6"]
+build = ["pyinstaller>=6.10"]
+
+[project.gui-scripts]
+pdfmanager = "pdfmanager.app:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "pdfmanager.__version__" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+qt_api = "pyside6"

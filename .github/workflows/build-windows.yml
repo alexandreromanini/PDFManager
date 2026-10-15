@@ -1,0 +1,40 @@
+name: Build Windows
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Inno Setup (si absent de l'image)
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup -y --no-progress
+          }
+
+      - name: Build (tests + exe + autotest + installeur)
+        run: .\packaging\build.ps1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PDFManager-setup
+          path: dist/PDFManager-*-setup.exe
+          if-no-files-found: error
+
+      - name: Journal de l'application (en cas d'echec)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdfmanager-log
+          path: ${{ env.APPDATA }}/PDFManager/pdfmanager.log
+          if-no-files-found: ignore
