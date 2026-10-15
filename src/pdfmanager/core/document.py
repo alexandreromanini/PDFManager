@@ -100,11 +100,13 @@ class PdfDocument:
         target = Path(target).absolute()
         fd, tmp = tempfile.mkstemp(dir=long_path(target.parent), prefix=".~", suffix=".pdf.tmp")
         try:
-            # tobytes() plutôt que save(fichier) : PyMuPDF rouvrirait le fichier par son nom
-            # via MuPDF. Par défaut il retire le chiffrement : on le conserve explicitement.
-            with pdf_lock:
-                data = self.doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_KEEP)
+            # fdopen d'abord : le descripteur est fermé même si tobytes() échoue, sinon
+            # Windows refuse ensuite de supprimer le fichier temporaire (WinError 32).
             with os.fdopen(fd, "wb") as f:
+                # tobytes() plutôt que save(f) : PyMuPDF rouvrirait le fichier par son nom
+                # via MuPDF. Par défaut il retire le chiffrement : on le conserve explicitement.
+                with pdf_lock:
+                    data = self.doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_KEEP)
                 f.write(data)
                 f.flush()
                 os.fsync(f.fileno())  # contenu sur disque avant la substitution
