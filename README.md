@@ -230,7 +230,9 @@ d'apparence (/AP) : vérifié par un moteur de rendu indépendant (Ghostscript).
   - une ligne qui mêlait plusieurs styles (un mot en gras…) prend le style de son premier mot ;
   - changer le nombre de lignes recompose le paragraphe (retours à la ligne approximatifs) ;
     un texte plus long peut chevaucher le contenu voisin (signalé) ;
-  - refusé : texte incliné, polices Type3, pages scannées (texte = image : OCR, phase 6) ;
+  - refusé : texte incliné, polices Type3, pages scannées sans OCR ; après OCR, la ligne
+    modifiée est effacée de l'image et réécrite en clair dans une police standard
+    (aspect différent du scan) ;
   - le texte réécrit passe en fin de page dans l'ordre de lecture (copier-coller, lecteurs
     d'écran) ; polices standard = alphabet latin uniquement.
 - **Texte ajouté** : c'est une annotation « machine à écrire » (comme *Remplir et signer*

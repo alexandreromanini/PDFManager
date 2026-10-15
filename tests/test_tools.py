@@ -261,3 +261,33 @@ def test_compare_documents(tmp_path):
     assert ("removed", "brun", "") in kinds and ("added", "", "Ajout final") in kinds
     assert all(page == 1 for c in changes for page, _, _ in c.old + c.new)
     assert compare.compare(compare.document_words(a), compare.document_words(a)) == []
+
+
+def test_edit_text_recognized_by_ocr(tmp_path):
+    """Régression : modifier un texte reconnu par OCR écrivait le nouveau texte par-dessus
+    l'ancien, resté visible dans l'image. La ligne est maintenant effacée de l'image (couleur
+    du papier) et réécrite en clair (couleur de l'encre)."""
+    from pdfmanager.core import editing as E
+
+    src = pymupdf.open()
+    p = src.new_page()
+    p.draw_rect(p.rect, color=None, fill=(0.97, 0.93, 0.85))  # papier crème
+    p.insert_text((72, 100), "Facture numéro 2026-041", fontsize=16, color=(0.1, 0.2, 0.6))
+    img = p.get_pixmap(dpi=200).tobytes("png")
+    d = pymupdf.open()
+    d.new_page().insert_image(d[0].rect, stream=img)
+    d.save(tmp_path / "scan.pdf")
+    doc = PdfDocument(tmp_path / "scan.pdf")
+    jobs.ocr_document(FakeTask(), doc, [0], "fra")
+    block = E.text_block_at(doc, 0, pymupdf.Point(100, 95))
+    assert block.lines[0].invisible and not block.lines[0].mixed
+    warnings = E.edit_block(doc, block, block.text.replace("2026-041", "2026-099"))
+    assert any("OCR" in w for w in warnings)
+    assert "2026-099" in [w[4] for w in text.page_words(doc, 0)]
+    pix = doc.render(0, 2)
+    ink = [pix.pixel(x, y) for y in range(170, 205) for x in range(140, 460)
+           if sum(pix.pixel(x, y)) < 450]
+    assert ink and all(b > r + 40 for r, _g, b in ink)  # encre bleue, rien de noir dessous
+    assert sum(pix.pixel(150, 160)) > 650  # fond crème conservé (pas de bande blanche/noire)
+    assert pix.pixel(150, 160) != (255, 255, 255)
+    assert len(ink) < 3000  # une seule ligne de texte, pas deux superposées
