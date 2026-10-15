@@ -66,3 +66,71 @@ def no_unexpected_dialogs(monkeypatch):
                        (QDialog, ("exec",))):
         for name in names:
             monkeypatch.setattr(cls, name, unexpected)
+
+
+def make_identity(name="Jean Dupont", issuer=None, *, tsa=False):
+    """Certificat X.509 de test : auto-signé, ou émis par `issuer` = (cert, clé).
+    Renvoie (cert, clé) au format cryptography."""
+    import datetime
+
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    subject = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, name)])
+    issuer_cert, issuer_key = issuer or (None, key)
+    now = datetime.datetime.now(datetime.UTC)
+    b = (x509.CertificateBuilder().subject_name(subject)
+         .issuer_name(issuer_cert.subject if issuer_cert else subject)
+         .public_key(key.public_key()).serial_number(x509.random_serial_number())
+         .not_valid_before(now - datetime.timedelta(days=1))
+         .not_valid_after(now + datetime.timedelta(days=365)))
+    if tsa:
+        b = b.add_extension(x509.ExtendedKeyUsage([ExtendedKeyUsageOID.TIME_STAMPING]), True)
+    elif issuer is None and name.startswith("Autorité"):
+        b = b.add_extension(x509.BasicConstraints(ca=True, path_length=None), True)
+    else:
+        b = b.add_extension(x509.KeyUsage(True, True, False, False, False, False, False,
+                                          False, False), True)
+    return b.sign(issuer_key, hashes.SHA256()), key
+
+
+def save_p12(path, identity, password="motdepasse"):
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.serialization import pkcs12
+
+    cert, key = identity
+    path.write_bytes(pkcs12.serialize_key_and_certificates(
+        b"id", key, cert, None, serialization.BestAvailableEncryption(password.encode())))
+    return path
+
+
+def der(cert):
+    from cryptography.hazmat.primitives import serialization
+
+    return cert.public_bytes(serialization.Encoding.DER)
+
+
+@pytest.fixture(scope="session")
+def identity():
+    return make_identity()
+
+
+@pytest.fixture
+def p12(tmp_path, identity):
+    return save_p12(tmp_path / "Jean Dupont é.p12", identity)
+
+
+@pytest.fixture(autouse=True)
+def isolated_data_dir(tmp_path, monkeypatch):
+    """Signatures mémorisées et certificats approuvés dans un dossier temporaire."""
+    d = tmp_path / "data"  # créé à la demande, comme le vrai : tmp_path reste propre
+
+    def data_dir():
+        d.mkdir(exist_ok=True)
+        return d
+
+    monkeypatch.setattr("pdfmanager.app.data_dir", data_dir)
+    return d

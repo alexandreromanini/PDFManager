@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import os
 import tempfile
 import threading
@@ -70,6 +71,12 @@ class PdfDocument:
         self._history: list[tuple[str, pymupdf.Document | None, pymupdf.Document | None]] = []
         self._pos = 0  # nombre d'entrées actuellement appliquées
         self._saved = 0  # valeur de _pos au dernier enregistrement (-1 : hors historique)
+        # Document signé : enregistrement par ajout (mise à jour incrémentale), sans quoi les
+        # signatures seraient invalidées. Le caviardage et le nettoyage le désactivent : le
+        # contenu retiré resterait lisible dans la version d'origine, conservée en tête.
+        self.incremental = False
+        if not self.doc.needs_pass:
+            self.incremental = is_signed(self.doc)
 
     # ----- édition -----------------------------------------------------------------------
     # Deux mécanismes, une seule pile :
@@ -106,7 +113,8 @@ class PdfDocument:
         """Applique `fn` à une copie du document, qui le remplace si `fn` réussit.
         ponytail: une copie complète en mémoire par opération de ce type, sans limite."""
         with pdf_lock:
-            new = pymupdf.open("pdf", self.doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_KEEP))
+            new = pymupdf.open("pdf", incremental_bytes(self.doc) if self.incremental
+                               else self.doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_KEEP))
             if new.needs_pass:
                 new.authenticate(self._password or "")
             fn(new)  # en cas d'exception, le document courant n'a pas bougé
@@ -198,6 +206,7 @@ class PdfDocument:
     def unlock(self, password: str) -> bool:
         if self.doc.authenticate(password) > 0:
             self._password = password
+            self.incremental = is_signed(self.doc)
             return True
         return False
 
@@ -238,23 +247,65 @@ class PdfDocument:
             return page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom).prerotate(rotation),
                                    alpha=False)
 
+    def current_bytes(self) -> bytes:
+        """Le fichier tel qu'il serait enregistré maintenant."""
+        with pdf_lock:
+            if self.incremental:  # octets signés intacts, modifications ajoutées à la suite
+                return incremental_bytes(self.doc)
+            # Par défaut tobytes() retire le chiffrement : on le conserve explicitement.
+            data = self.doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_KEEP)
+        # Ramasse-miettes sur une COPIE : sans lui, les objets devenus inutiles (pages
+        # supprimées, image d'avant caviardage…) restent lisibles dans le fichier ; et
+        # sur le document lui-même, il renumérote les objets, ce qui casserait le journal.
+        clean = pymupdf.open("pdf", data)
+        if clean.needs_pass:
+            clean.authenticate(self._password or "")
+        return clean.tobytes(garbage=3, deflate=True, encryption=pymupdf.PDF_ENCRYPT_KEEP)
+
     def save_atomic(self, target: str | os.PathLike[str]) -> None:
         """Écrit le document dans `target` sans toucher à l'historique (copie)."""
+        write_atomic(target, self.current_bytes)
 
-        def produce() -> bytes:
-            # Par défaut tobytes() retire le chiffrement : on le conserve explicitement.
-            with pdf_lock:
-                data = self.doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_KEEP)
-            # Ramasse-miettes sur une COPIE : sans lui, les objets devenus inutiles (pages
-            # supprimées, image d'avant caviardage…) restent lisibles dans le fichier ; et
-            # sur le document lui-même, il renumérote les objets, ce qui casserait le journal.
-            clean = pymupdf.open("pdf", data)
-            if clean.needs_pass:
-                clean.authenticate(self._password or "")
-            return clean.tobytes(garbage=3, deflate=True,
-                                 encryption=pymupdf.PDF_ENCRYPT_KEEP)
+    def replace(self, data: bytes, path: str | os.PathLike[str]) -> None:
+        """Le document devient `data`, enregistré dans `path` (après une signature) :
+        l'historique repart de zéro, une signature ne s'annule pas."""
+        with pdf_lock:
+            doc = pymupdf.open(stream=data, filetype="pdf")
+            if doc.needs_pass:
+                doc.authenticate(self._password or "")
+            self.doc = doc
+            self._history.clear()
+            self._pos = self._saved = 0
+            self.path = Path(path).absolute()
+            self.incremental = is_signed(doc)
+        self._changed()
 
-        write_atomic(target, produce)
+
+def is_signed(doc: pymupdf.Document) -> bool:
+    """Au moins un champ de signature signé (un champ vide ne compte pas)."""
+    if doc.get_sigflags() < 1:  # pas de formulaire avec signature : évite de tout parcourir
+        return False
+    return any(w.is_signed for page in doc
+               for w in page.widgets(types=[pymupdf.PDF_WIDGET_TYPE_SIGNATURE]))
+
+
+def incremental_bytes(doc: pymupdf.Document) -> bytes:
+    """Fichier d'origine suivi des seules modifications (mise à jour incrémentale).
+    PyMuPDF la refuse pour un document ouvert depuis la mémoire ; MuPDF, lui, recopie
+    l'original puis ajoute les objets modifiés : on l'appelle directement (API interne de
+    PyMuPDF, couverte par les tests de signature). Mode « snapshot » : sans lui, MuPDF croit
+    ensuite le fichier déjà prolongé, et l'écriture suivante pointe (/Prev) dans le vide."""
+    pdf = pymupdf._as_pdf_document(doc)
+    pdf.m_internal.resynth_required = 0  # comme save() : ne pas redessiner les apparences
+    opts = pymupdf.mupdf.PdfWriteOptions()
+    opts.do_incremental = 1
+    opts.do_snapshot = 1
+    opts.do_encrypt = pymupdf.PDF_ENCRYPT_KEEP
+    buf = io.BytesIO()
+    out = pymupdf.JM_new_output_fileptr(buf)
+    pymupdf.mupdf.pdf_write_document(pdf, out, opts)
+    out.fz_close_output()
+    return buf.getvalue()
 
 
 def write_atomic(target: str | os.PathLike[str], produce: Callable[[], bytes]) -> None:

@@ -13,6 +13,8 @@ dependencies = [
     # Essentials suffit (QtWidgets, QtGui, QtPrintSupport) et évite ~500 Mo de WebEngine.
     "PySide6-Essentials>=6.8",
     "PyMuPDF>=1.26",
+    # Signatures PAdES (MIT) ; certifi et cryptography viennent avec.
+    "pyHanko>=0.37",
 ]
 
 [project.optional-dependencies]
