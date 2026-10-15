@@ -89,8 +89,10 @@ def text_block_at(doc: PdfDocument, page: int, point: pymupdf.Point) -> TextBloc
             if rotate is None:
                 raise ValueError("Texte incliné : modification non prise en charge.")
             styles = {(s["font"], round(s["size"], 1), s["color"]) for s in spans}
+            # Trait d'union conditionnel (U+00AD) : invisible à la saisie, c'est un « - ».
+            line_text = "".join(s["text"] for s in li["spans"]).rstrip().replace("\xad", "-")
             lines.append(Line(pymupdf.Rect(li["bbox"]), pymupdf.Point(first["origin"]),
-                              "".join(s["text"] for s in li["spans"]).rstrip(), first["size"],
+                              line_text, first["size"],
                               first["font"], _rgb(first["color"]), first["flags"], rotate,
                               len(styles) > 1))
         if lines:
@@ -139,6 +141,26 @@ def _original_font(doc: PdfDocument, page: int, font: str,
     return None, "absente"
 
 
+def _style(line: Line) -> tuple[str, bool, bool]:
+    """(famille sans / serif / mono, gras, italique) de la police d'une ligne."""
+    name = line.font.lower()
+    mono = line.flags & 8 or "mono" in name or "courier" in name
+    serif = line.flags & 4 or any(k in name for k in ("serif", "times", "roman", "georgia"))
+    serif = serif and "sans" not in name
+    bold = line.flags & 16 or any(k in name for k in ("bold", "black", "heavy", "semibold"))
+    italic = line.flags & 2 or "italic" in name or "oblique" in name
+    return "mono" if mono else "serif" if serif else "sans", bool(bold), bool(italic)
+
+
+# Espaces typographiques (fine insécable de Word, Excel…) : remplacées par une espace
+# insécable ordinaire quand la police ne les dessine pas.
+SPACES = "\u202f\u2009\u2007\u2008\u200a"
+
+
+def _fit_text(text: str, font: pymupdf.Font) -> str:
+    return "".join("\xa0" if c in SPACES and not font.has_glyph(ord(c)) else c for c in text)
+
+
 def substitute_font(line: Line) -> tuple[str, str]:
     """Police standard la plus proche : (nom PyMuPDF, libellé)."""
     name = line.font.lower()
@@ -169,6 +191,7 @@ def _rewrite(doc: PdfDocument, block: TextBlock, lines: list[str], fontname: str
     texte déborde du bloc d'origine."""
     first = block.lines[0]
     measure = pymupdf.Font(fontbuffer=buffer) if buffer else pymupdf.Font(fontname)
+    lines = [_fit_text(s, measure) for s in lines]
     overflow = False
     same = len(lines) == len(block.lines)
     targets = [k for k, line in enumerate(block.lines)
@@ -236,16 +259,26 @@ def edit_block(doc: PdfDocument, block: TextBlock, new_text: str) -> list[str]:
     buffer, status = _original_font(doc, block.page, first.font, new_text)
     sub_name, sub_label = substitute_font(first)
     attempts = [("Fedit", buffer, None)] if buffer else []
-    installed = fonts.find(first.font)  # la même police, installée sur l'ordinateur
-    if installed:
-        try:
-            attempts.append(("Fsys", fonts.subset(installed, new_text), None))
+
+    def installed(path, label: str | None) -> None:
+        try:  # réduite aux caractères utilisés (quelques Ko)
+            attempts.append(("Fsys", fonts.subset(path, new_text + SPACES), label))
         except Exception:  # police que fontTools ne sait pas réduire : on passe
             pass
-    attempts.append((sub_name, None, sub_label))
+
+    if same_font := fonts.find(first.font):  # la même police, installée sur l'ordinateur
+        installed(same_font, None)
+    if near := fonts.generic(*_style(first)):  # Arial, Times New Roman… (Windows)
+        installed(*near)
+    # En dernier recours, les polices de MuPDF, intégrées en Unicode (le nom standard seul,
+    # « helv »…, n'écrit pas « € » ni les espaces fines).
+    attempts.append(("Fstd", pymupdf.Font(sub_name).buffer, sub_label))
     original = first.font.split("+")[-1]
-    # Police standard non intégrée (Helvetica, Times…) remplacée par elle-même : rien à dire.
-    same_family = status == "absente" and _norm(sub_label.split()[0]) in _norm(original)
+    # Police standard non intégrée (Helvetica, Times…) remplacée par elle-même ou son
+    # équivalent Windows (Arial, Times New Roman…) : rien à dire.
+    standard = {"sans": ("helvetica", "arial"), "serif": ("times",), "mono": ("courier",)}
+    same_family = status == "absente" and any(k in _norm(original)
+                                              for k in standard[_style(first)[0]])
     for fontname, buf, label in attempts:
         try:
             overflow = _rewrite(doc, block, lines, fontname, buf)

@@ -2,6 +2,19 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [0.8.1] - 2026-10-15
+
+### Corrigé
+- **Impossible de modifier les montants** (« Ces caractères ne peuvent pas être
+  écrits… ») : quand la police d'origine ne pouvait pas servir, les polices de secours
+  (Helvetica / Times « standard » du PDF) n'écrivaient ni « € » ni l'espace fine insécable
+  que Word et Excel placent entre les milliers. Les polices de secours sont désormais de
+  vraies polices Unicode : Arial, Times New Roman ou Courier New de l'ordinateur (réduites
+  aux caractères utilisés), sinon celles de MuPDF ; une espace fine que la police ne
+  dessine pas devient une espace insécable ordinaire.
+- La police installée n'était pas retrouvée quand le PDF la nomme « Arial Regular ».
+- Un trait d'union codé comme « conditionnel » était invisible dans la zone de saisie.
+
 ## [0.8.0] - 2026-10-15
 
 ### Modifié

@@ -16,7 +16,7 @@ Usage strictement personnel (PyMuPDF est sous AGPL).
 | 5 | Formulaires, signatures | ✅ 0.5.0 |
 | 6 | OCR, compression, conversions, PDF/A | ✅ 0.6.1 |
 | 7 | Refonte visuelle (Windows 11, panneau d'outils, accueil) | ✅ 0.7.0 |
-| 7b | Logo, modifier / ajouter du texte sur la page | ✅ 0.8.0 |
+| 7b | Logo, modifier / ajouter du texte sur la page | ✅ 0.8.1 |
 
 ## Développement (Linux)
 
@@ -225,8 +225,8 @@ d'apparence (/AP) : vérifié par un moteur de rendu indépendant (Ghostscript).
   - la plupart des PDF intègrent leurs polices **en sous-ensemble** (seulement les caractères
     déjà utilisés). Si la même police est installée sur l'ordinateur (Calibri, Arial, Times
     New Roman… pour un document Word), elle est utilisée ; sinon le texte passe en
-    **Helvetica / Times / Courier** (gras, italique) le plus proche, et l'application le
-    signale. Les polices `.ttc` (Cambria, polices asiatiques) ne sont pas reprises ;
+    **Arial / Times New Roman / Courier New** (gras, italique) le plus proche, ou à défaut
+    les polices de MuPDF, et l'application le signale. Les polices `.ttc` (Cambria, polices asiatiques) ne sont pas reprises ;
   - une ligne qui mêlait plusieurs styles (un mot en gras…) prend le style de son premier mot ;
   - changer le nombre de lignes recompose le paragraphe (retours à la ligne approximatifs) ;
     un texte plus long peut chevaucher le contenu voisin (signalé) ;

@@ -63,10 +63,32 @@ def find(pdf_name: str) -> Path | None:
     fonts = index()
     if k in fonts:
         return fonts[k]
-    for suffix in ("psmt", "mt", "ps"):  # « ArialMT », « TimesNewRomanPSMT »
+    # « ArialMT », « TimesNewRomanPSMT », « Arial Regular » (nom complet : « Arial »)
+    for suffix in ("psmt", "mt", "ps", "regular", "normal", "roman"):
         if k.endswith(suffix) and k[: -len(suffix)] in fonts:
             return fonts[k[: -len(suffix)]]
     return None
+
+
+# Polices de remplacement installées sur tout Windows (Unicode, avec « € ») :
+# famille → {(gras, italique): nom PostScript}
+GENERIC = {
+    "sans": ("Arial", {(0, 0): "ArialMT", (1, 0): "Arial-BoldMT", (0, 1): "Arial-ItalicMT",
+                       (1, 1): "Arial-BoldItalicMT"}),
+    "serif": ("Times New Roman", {(0, 0): "TimesNewRomanPSMT", (1, 0): "TimesNewRomanPS-BoldMT",
+                                  (0, 1): "TimesNewRomanPS-ItalicMT",
+                                  (1, 1): "TimesNewRomanPS-BoldItalicMT"}),
+    "mono": ("Courier New", {(0, 0): "CourierNewPSMT", (1, 0): "CourierNewPS-BoldMT",
+                             (0, 1): "CourierNewPS-ItalicMT",
+                             (1, 1): "CourierNewPS-BoldItalicMT"}),
+}
+
+
+def generic(family: str, bold: bool, italic: bool) -> tuple[Path, str] | None:
+    """Police installée de la famille (sans, serif, mono) et son libellé, ou None."""
+    label, styles = GENERIC[family]
+    path = find(styles[(int(bold), int(italic))])
+    return (path, label + " gras" * bold + " italique" * italic) if path else None
 
 
 def subset(path: Path, text: str) -> bytes:
