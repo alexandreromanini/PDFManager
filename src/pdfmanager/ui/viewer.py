@@ -73,9 +73,10 @@ def to_qrect(rect: pymupdf.Rect, m: pymupdf.Matrix) -> QRectF:
     return QRectF(r.x0, r.y0, r.width, r.height)
 
 
-def _render(task: Task, doc: PdfDocument, key: RenderKey) -> tuple[RenderKey, QImage]:
+def _render(task: Task, doc: PdfDocument, key: RenderKey) -> tuple[RenderKey, QImage] | None:
     index, scale, rotation, _version = key
-    return key, to_qimage(doc.render(index, scale, rotation))
+    pix = doc.render(index, scale, rotation)
+    return None if pix is None else (key, to_qimage(pix))
 
 
 class ImageCache:
@@ -373,7 +374,9 @@ class PdfView(QGraphicsView):
         task.signals.result.connect(self._on_rendered)
         self.pool.start(task, priority)
 
-    def _on_rendered(self, result: tuple[RenderKey, QImage]) -> None:
+    def _on_rendered(self, result: tuple[RenderKey, QImage] | None) -> None:
+        if result is None:  # page supprimée entre-temps
+            return
         key, img = result
         self.cache.put(key, img)
         self._pending.discard(key)

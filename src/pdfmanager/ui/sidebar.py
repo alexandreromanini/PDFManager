@@ -30,10 +30,15 @@ THUMB = QSize(110, 150)
 
 
 def _render_thumb(task: Task, doc: PdfDocument, index: int, version: int,
-                  dpr: float) -> tuple[int, int, QImage]:
-    r = doc.page_rect(index)
-    zoom = min(THUMB.width() / r.width, THUMB.height() / r.height) * dpr
-    img = to_qimage(doc.render(index, zoom))
+                  dpr: float) -> tuple[int, int, QImage] | None:
+    try:
+        r = doc.page_rect(index)
+    except IndexError:  # page supprimée depuis la demande
+        return None
+    pix = doc.render(index, min(THUMB.width() / r.width, THUMB.height() / r.height) * dpr)
+    if pix is None:
+        return None
+    img = to_qimage(pix)
     img.setDevicePixelRatio(dpr)
     return index, version, img
 
@@ -89,7 +94,9 @@ class ThumbnailModel(QAbstractListModel):
         self._min_version = self.doc.version
         self.endResetModel()
 
-    def _on_rendered(self, result: tuple[int, int, QImage]) -> None:
+    def _on_rendered(self, result: tuple[int, int, QImage] | None) -> None:
+        if result is None:  # page supprimée entre-temps
+            return
         i, version, img = result
         self._pending.discard((i, version))
         if version < max(self._versions.get(i, -1), self._min_version) or i >= self.rowCount():

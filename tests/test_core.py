@@ -139,3 +139,9 @@ def test_text_extraction_matches_pymupdf_in_every_corner(tmp_path, rotation):
     hits = [tuple(round(v, 1) for v in r) for r in dict(text.search(doc, "BD"))[0]]
     assert got == expected and hits == expected_hits
     assert "DEHORS" not in [w for w, _ in got]
+
+
+def test_render_of_a_vanished_page_returns_none(sample_pdf):
+    """Un rendu demandé en arrière-plan juste avant une suppression ne doit pas échouer."""
+    doc = PdfDocument(sample_pdf)
+    assert doc.render(3, 1.0) is None and doc.render(2, 0.2) is not None

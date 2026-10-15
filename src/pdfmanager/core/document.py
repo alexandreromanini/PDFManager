@@ -224,13 +224,17 @@ class PdfDocument:
         with pdf_lock:
             return self.doc.get_toc()
 
-    def render(self, index: int, zoom: float, rotation: int = 0) -> pymupdf.Pixmap:
-        rect = self.page_rect(index)
-        pixels = rect.width * rect.height * zoom * zoom
-        if pixels > MAX_RENDER_PIXELS:
-            zoom *= (MAX_RENDER_PIXELS / pixels) ** 0.5
+    def render(self, index: int, zoom: float, rotation: int = 0) -> pymupdf.Pixmap | None:
+        """Image de la page, ou None si elle n'existe plus (rendu demandé en arrière-plan
+        juste avant une suppression de pages)."""
         with pdf_lock:
+            if index >= self.doc.page_count:
+                return None
             page = self.doc[index]
+            rect = page.rect
+            pixels = rect.width * rect.height * zoom * zoom
+            if pixels > MAX_RENDER_PIXELS:
+                zoom *= (MAX_RENDER_PIXELS / pixels) ** 0.5
             return page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom).prerotate(rotation),
                                    alpha=False)
 

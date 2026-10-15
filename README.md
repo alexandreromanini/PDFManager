@@ -10,7 +10,7 @@ Usage strictement personnel (PyMuPDF est sous AGPL).
 |---|---|---|
 | 1 | Lecteur, CI Windows | ✅ 0.1.0 |
 | 2 | Annotations, annuler/rétablir, enregistrement | ✅ 0.2.2 |
-| 3 | Organisation des pages | ✅ 0.3.0 |
+| 3 | Organisation des pages | ✅ 0.3.1 |
 | 4 | Édition, caviardage | — |
 | 5 | Formulaires, signatures | — |
 | 6 | OCR, compression, conversions, PDF/A | — |
