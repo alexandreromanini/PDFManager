@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import pymupdf
 from PySide6.QtCore import QObject
-from PySide6.QtWidgets import QInputDialog, QLineEdit, QMenu, QMessageBox, QToolBar
+from PySide6.QtWidgets import QInputDialog, QLineEdit, QMenu, QMessageBox
 
 from pdfmanager.core import forms as F
 from pdfmanager.ui.viewer import FORM_TOOLS, Tool
@@ -20,8 +20,6 @@ class FormFiller(QObject):
     def __init__(self, window) -> None:
         super().__init__(window)
         self.window = window
-        self.toolbar = QToolBar("Formulaires et signatures")
-        self.toolbar.setObjectName("forms_toolbar")
         self.menu = QMenu("F&ormulaires", window)
         self.menu.setToolTipsVisible(True)
         self.tab_actions = []
@@ -29,7 +27,6 @@ class FormFiller(QObject):
             a = window.annotator.actions[tool]
             a.setToolTip(f"{tool.value} : tracer son cadre ; un clic sur un champ existant "
                          "propose de le supprimer")
-            self.toolbar.addAction(a)
             self.menu.addAction(a)
             self.tab_actions.append(a)
 

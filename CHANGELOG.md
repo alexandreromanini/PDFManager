@@ -2,7 +2,27 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
-## [0.6.1] — 2026-10-15
+## [0.7.0] - 2026-10-15
+
+Phase 7 - refonte visuelle, d'après la maquette validée (Windows 11 épuré, accent rouge).
+
+### Modifié
+- Nouvelle fenêtre : barre d'application (Accueil, onglets des documents, recherche,
+  thème clair/sombre, menu ⋯ qui regroupe les menus classiques), **panneau d'outils** à
+  gauche (catalogue groupé avec recherche, puis panneau propre à chaque outil), barre du
+  document au-dessus de la page, panneau de droite à icônes (pages, signets, commentaires,
+  signatures). Les quatre lignes de barres d'outils disparaissent.
+- **Page d'accueil** : ouvrir ou déposer des PDF, outils populaires, fichiers récents.
+- Icônes Lucide (trait fin), recolorées selon le thème ; thème clair et sombre complets,
+  police Segoe UI, coins arrondis, dialogues harmonisés.
+- Les messages de la barre d'état deviennent des notifications discrètes.
+- Plus de tiret long dans l'interface.
+
+### Corrigé
+- Boutons standard des dialogues en anglais (« Save », « Cancel ») : les traductions
+  françaises de Qt sont désormais chargées.
+
+## [0.6.1] - 2026-10-15
 
 Session de débogage transversale (scans tournés, document signé, protégé, réparé, chemins
 de plus de 260 caractères, annuler/rétablir mêlant toutes les sortes d'opérations) : aucun
@@ -12,9 +32,9 @@ défaut trouvé.
 - OCR d'un document signé : le dialogue prévient que le texte ajouté apparaîtra comme une
   modification postérieure à la signature (qui reste valide).
 
-## [0.6.0] — 2026-10-15
+## [0.6.0] - 2026-10-15
 
-Phase 6 — outils avancés.
+Phase 6 - outils avancés.
 
 ### Ajouté
 - Menu **Outils** :
@@ -43,9 +63,9 @@ Phase 6 — outils avancés.
 - `python -m pdfmanager` sans garde `__main__` : les processus de calcul auraient relancé
   l'interface.
 
-## [0.5.0] — 2026-10-15
+## [0.5.0] - 2026-10-15
 
-Phase 5 — formulaires et signatures.
+Phase 5 - formulaires et signatures.
 
 ### Ajouté
 - Menu et barre **Formulaires** : remplir les champs d'un clic (texte, cases, boutons radio,
@@ -69,9 +89,9 @@ Phase 5 — formulaires et signatures.
 - Appliquer les caviardages retire aussi les champs de formulaire (et leurs valeurs) qui
   chevauchent les zones.
 
-## [0.4.0] — 2026-10-15
+## [0.4.0] - 2026-10-15
 
-Phase 4 — édition.
+Phase 4 - édition.
 
 ### Ajouté
 - Barre et menu **Modifier** : modifier un texte existant (police d'origine si elle contient
@@ -88,15 +108,15 @@ Phase 4 — édition.
 - L'enregistrement nettoie le fichier (ramasse-miettes sur une copie) : l'image d'origine
   restait jusqu'ici dans le fichier à côté de sa version caviardée.
 
-## [0.3.1] — 2026-10-15
+## [0.3.1] - 2026-10-15
 
 ### Corrigé
 - Un rendu (page ou vignette) demandé juste avant une suppression de pages échouait en
   arrière-plan et remplissait le journal d'erreurs ; il est désormais ignoré proprement.
 
-## [0.3.0] — 2026-10-15
+## [0.3.0] - 2026-10-15
 
-Phase 3 — organisation des pages.
+Phase 3 - organisation des pages.
 
 ### Ajouté
 - Menu **Pages** et clic droit sur les vignettes : pivoter, supprimer, extraire, insérer (page
@@ -113,22 +133,22 @@ Phase 3 — organisation des pages.
 - Extraction, fusion ou insertion depuis un document déjà modifié : échouaient (MuPDF écrit
   dans la source pendant la copie).
 
-## [0.2.2] — 2026-10-15
+## [0.2.2] - 2026-10-15
 
 ### Corrigé
 - Correctif 0.2.1 incomplet : sur une page tournée à 90° ou 270°, le texte du bas de la
   page échappait à la recherche et à la sélection.
 
-## [0.2.1] — 2026-10-15
+## [0.2.1] - 2026-10-15
 
 ### Corrigé
 - Recherche et sélection de texte en erreur sur les pages tournées après une première
   modification (PyMuPDF modifiait la rotation de la page pendant l'extraction, ce que le
   journal annuler/rétablir interdit).
 
-## [0.2.0] — 2026-10-15
+## [0.2.0] - 2026-10-15
 
-Phase 2 — annotations et commentaires.
+Phase 2 - annotations et commentaires.
 
 ### Ajouté
 - Barre **Commenter** : surligner, souligner, barrer, note, texte libre, rectangle, ellipse,
@@ -146,9 +166,9 @@ Phase 2 — annotations et commentaires.
 - Sauvegarde atomique sous Windows : le fichier temporaire est fermé avant d'être supprimé
   en cas d'échec (WinError 32).
 
-## [0.1.0] — 2026-10-15
+## [0.1.0] - 2026-10-15
 
-Phase 1 — lecteur.
+Phase 1 - lecteur.
 
 ### Ajouté
 - Ouverture de PDF (y compris protégés par mot de passe), onglets, fichiers récents, glisser-déposer.

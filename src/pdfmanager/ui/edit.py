@@ -17,12 +17,12 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QSpinBox,
-    QToolBar,
 )
 
 from pdfmanager.core import editing as E
 from pdfmanager.core import pages as P
 from pdfmanager.core.document import PdfError
+from pdfmanager.ui.icons import icon
 from pdfmanager.ui.organize import IMAGE_FILTER, _Dialog
 from pdfmanager.ui.viewer import EDIT_TOOLS, Tool
 
@@ -63,39 +63,35 @@ class Editor(QObject):
         self.window = window
         self.settings = QSettings()
         self.pending_image: bytes | None = None
-        self.toolbar = QToolBar("Modifier")
-        self.toolbar.setObjectName("edit_toolbar")
         self.menu = QMenu("&Modifier", window)
         self.tab_actions: list[QAction] = []
         tools = window.annotator.actions
         for tool in EDIT_TOOLS:
-            self.toolbar.addAction(tools[tool])
             self.menu.addAction(tools[tool])
             self.tab_actions.append(tools[tool])
         self.tab_actions.append(tools[Tool.ADD_IMAGE])
 
-        def act(label: str, slot) -> QAction:
-            a = QAction(label, self)
+        def act(label: str, slot, icon_name: str) -> QAction:
+            a = QAction(icon(icon_name), label, self)
             a.triggered.connect(lambda: self._with_tab(slot))
-            self.toolbar.addAction(a)
             self.menu.addAction(a)
             self.tab_actions.append(a)
             return a
 
-        act("Insérer une image…", self.choose_image)
-        self.toolbar.addSeparator()
+        self.act_insert_image = act("Insérer une image…", self.choose_image, "image-plus")
         self.menu.addSeparator()
-        act("Rechercher et caviarder…", self.redact_text)
-        act("Appliquer les caviardages", self.apply_redactions)
+        self.act_redact_search = act("Rechercher et caviarder…", self.redact_text,
+                                     "file-search")
+        self.act_apply_redactions = act("Appliquer les caviardages", self.apply_redactions,
+                                        "circle-check")
         self.menu.addSeparator()
-        act("Nettoyer le document…", self.clean)
+        self.act_clean = act("Nettoyer le document…", self.clean, "paintbrush")
         self.text_size = QSpinBox()
         self.text_size.setRange(4, 144)
         self.text_size.setSuffix(" pt")
         self.text_size.setToolTip("Taille du texte ajouté")
         self.text_size.setValue(int(self.settings.value("text_size", 12)))
         self.text_size.valueChanged.connect(lambda v: self.settings.setValue("text_size", v))
-        self.toolbar.addWidget(self.text_size)
 
     def _with_tab(self, fn) -> None:
         if tab := self.window.current_tab():
@@ -148,7 +144,7 @@ class Editor(QObject):
                 "qu'après OCR).", 6000)
             return
         first = block.lines[0]
-        label = (f"Police : {first.font.split('+')[-1]} — {first.size:g} pt\n"
+        label = (f"Police : {first.font.split('+')[-1]} - {first.size:g} pt\n"
                  "Si elle ne contient pas les caractères saisis, une police standard proche "
                  "la remplace (vous serez prévenu).")
         txt, ok = QInputDialog.getMultiLineText(self.window, "Modifier le texte", label,
@@ -157,7 +153,7 @@ class Editor(QObject):
             return
         warnings = tab.apply(E.edit_block, block, txt)
         if warnings:
-            QMessageBox.information(self.window, "Texte modifié — à vérifier",
+            QMessageBox.information(self.window, "Texte modifié - à vérifier",
                                     "\n\n".join(warnings))
 
     # ----- images ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
-"""Barre « Commenter » : outil, couleur, épaisseur, auteur ; transforme les gestes captés
-par PdfView et les actions du panneau Commentaires en opérations de core.annotations."""
+"""Outils de la vue (une action par outil, exclusives), couleur, épaisseur, auteur ;
+transforme les gestes captés par PdfView et les actions du panneau Commentaires en
+opérations de core.annotations. Le panneau d'outils (ui.shell) présente ces réglages."""
 
 from __future__ import annotations
 
@@ -14,11 +15,11 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QMainWindow,
     QMenu,
-    QToolBar,
-    QToolButton,
 )
 
 from pdfmanager.core import annotations as A
+from pdfmanager.ui.icons import TOOLS as TOOL_ICONS
+from pdfmanager.ui.icons import icon
 from pdfmanager.ui.viewer import COMMENT_TOOLS, PdfView, Tool
 
 DEFAULT_COLORS = {
@@ -45,35 +46,27 @@ class Annotator(QObject):
         self.tool = Tool.SELECT
         self.stamp = A.STAMPS[0][0]
 
-        self.toolbar = QToolBar("Commenter")
-        self.toolbar.setObjectName("annotate_toolbar")
         self.group = QActionGroup(self)
         self.actions: dict[Tool, QAction] = {}
         for tool in Tool:
-            a = QAction(tool.value, self)
+            a = QAction(icon(TOOL_ICONS[tool.name]), tool.value, self)
             a.setCheckable(True)
             a.setData(tool)
             self.group.addAction(a)  # exclusif avec tous les outils (pages, édition…)
-            if tool in COMMENT_TOOLS:  # les autres vivent dans leurs menus / barres
-                self.toolbar.addAction(a)
             window.addAction(a)  # raccourcis actifs partout dans la fenêtre
             self.actions[tool] = a
-            if tool is Tool.HAND:
-                self.toolbar.addSeparator()
         self.actions[Tool.SELECT].setShortcuts([QKeySequence("V"), QKeySequence("Esc")])
         self.actions[Tool.HAND].setShortcut("H")
         self.actions[Tool.SELECT].setChecked(True)
         self.group.triggered.connect(lambda a: self.set_tool(a.data()))
 
-        stamp_menu = QMenu(window)
+        self.stamp_menu = QMenu(window)
         for sid, label in A.STAMPS:
-            stamp_menu.addAction(label, lambda sid=sid: self._choose_stamp(sid))
-        self.actions[Tool.STAMP].setMenu(stamp_menu)
-        button = self.toolbar.widgetForAction(self.actions[Tool.STAMP])
-        button.setPopupMode(QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+            self.stamp_menu.addAction(label, lambda sid=sid: self._choose_stamp(sid))
+        self.actions[Tool.STAMP].setMenu(self.stamp_menu)
 
-        self.toolbar.addSeparator()
-        self.color_action = self.toolbar.addAction("Couleur…", self.choose_color)
+        self.color_action = QAction("Couleur…", self)
+        self.color_action.triggered.connect(self.choose_color)
         self.width_spin = QDoubleSpinBox()
         self.width_spin.setRange(0.5, 20)
         self.width_spin.setSingleStep(0.5)
@@ -81,7 +74,6 @@ class Annotator(QObject):
         self.width_spin.setToolTip("Épaisseur des formes et du dessin")
         self.width_spin.setValue(float(self.settings.value("tool_width", 2.0)))
         self.width_spin.valueChanged.connect(self._width_changed)
-        self.toolbar.addWidget(self.width_spin)
         self._update_color_icon()
 
     # ----- réglages -----------------------------------------------------------------------
@@ -107,11 +99,19 @@ class Annotator(QObject):
                                           DEFAULT_COLORS.get(tool, "#e53935")))
 
     def choose_color(self) -> None:
-        c = QColorDialog.getColor(self.color(), self.window, f"Couleur — {self.tool.value}")
+        c = QColorDialog.getColor(self.color(), self.window, f"Couleur - {self.tool.value}")
         if c.isValid():
-            self.settings.setValue(f"tool_colors/{self.tool.name}", c.name())
-            self._update_color_icon()
-            self._style_view()
+            self.set_color(c)
+
+    def set_color(self, c: QColor) -> None:
+        """Couleur de l'outil courant (mémorisée par outil)."""
+        self.settings.setValue(f"tool_colors/{self.tool.name}", c.name())
+        self._update_color_icon()
+        self._style_view()
+        self.color_changed()
+
+    def color_changed(self) -> None:
+        """Remplacé par le panneau d'outils pour suivre la couleur affichée."""
 
     def _update_color_icon(self) -> None:
         pix = QPixmap(16, 16)

@@ -1,5 +1,5 @@
 """Menu « Pages » : rotation, suppression, déplacement, insertion, extraction, recadrage,
-en-têtes / pieds de page, filigrane, fusion et scission — et leurs boîtes de dialogue."""
+en-têtes / pieds de page, filigrane, fusion et scission - et leurs boîtes de dialogue."""
 
 from __future__ import annotations
 
@@ -35,6 +35,7 @@ from PySide6.QtWidgets import (
 
 from pdfmanager.core import pages as P
 from pdfmanager.core.document import PdfError
+from pdfmanager.ui.icons import icon
 from pdfmanager.ui.viewer import Tool
 
 PDF_FILTER = "Documents PDF (*.pdf)"
@@ -302,33 +303,36 @@ class PageOrganizer(QObject):
         self.menu = QMenu("&Pages", window)
         self.tab_actions: list[QAction] = []  # actives seulement avec un document ouvert
 
-        def act(label: str, slot, *, needs_tab: bool = True) -> QAction:
-            a = self.menu.addAction(label, lambda: self._with_tab(slot) if needs_tab else slot())
+        def act(label: str, slot, icon_name: str, *, needs_tab: bool = True) -> QAction:
+            a = self.menu.addAction(icon(icon_name), label,
+                                    lambda: self._with_tab(slot) if needs_tab else slot())
             if needs_tab:
                 self.tab_actions.append(a)
             return a
 
-        act("Pivoter à gauche", lambda t: self.rotate(t, -90))
-        act("Pivoter à droite", lambda t: self.rotate(t, 90))
-        act("Supprimer…", self.delete)
-        act("Extraire…", self.extract)
+        act("Pivoter à gauche", lambda t: self.rotate(t, -90), "rotate-ccw")
+        act("Pivoter à droite", lambda t: self.rotate(t, 90), "rotate-cw")
+        act("Supprimer…", self.delete, "trash-2")
+        act("Extraire…", self.extract, "file-down")
         self.menu.addSeparator()
-        act("Insérer une page vierge", lambda t: self.insert_blank(t, t.view.current_page + 1))
-        act("Insérer un PDF…", lambda t: self.insert_pdf_dialog(t, t.view.current_page + 1))
+        act("Insérer une page vierge", lambda t: self.insert_blank(t, t.view.current_page + 1),
+            "file-plus-2")
+        act("Insérer un PDF…", lambda t: self.insert_pdf_dialog(t, t.view.current_page + 1),
+            "file-input")
         act("Insérer des images…",
-            lambda t: self.insert_images_dialog(t, t.view.current_page + 1))
+            lambda t: self.insert_images_dialog(t, t.view.current_page + 1), "image-plus")
         self.menu.addSeparator()
         crop = window.annotator.actions[Tool.CROP]
         crop.setText("Recadrer (tracer la zone à garder)")
         self.menu.addAction(crop)
         self.tab_actions.append(crop)
-        act("Annuler le recadrage…", self.reset_crop)
+        act("Annuler le recadrage…", self.reset_crop, "maximize")
         self.menu.addSeparator()
-        act("En-tête, pied de page et numérotation…", self.header_footer)
-        act("Filigrane…", self.watermark)
+        act("En-tête, pied de page et numérotation…", self.header_footer, "panel-top")
+        act("Filigrane…", self.watermark, "droplets")
         self.menu.addSeparator()
-        act("Fusionner des PDF…", self.merge, needs_tab=False)
-        act("Scinder le document…", self.split)
+        self.act_merge = act("Fusionner des PDF…", self.merge, "combine", needs_tab=False)
+        self.act_split = act("Scinder le document…", self.split, "scissors")
 
     def _with_tab(self, fn) -> None:
         if tab := self.window.current_tab():

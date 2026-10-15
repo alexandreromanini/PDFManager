@@ -160,7 +160,7 @@ class PageItem(QGraphicsItem):
 class PdfView(QGraphicsView):
     page_changed = Signal(int)
     zoom_changed = Signal(float)
-    # (outil, page, données) — données selon l'outil : mots (marquage), Point (note),
+    # (outil, page, données) - données selon l'outil : mots (marquage), Point (note),
     # (Point, Point) (formes, texte libre, tampon), [Point] (dessin)
     drawn = Signal(object, int, object)
     annot_selected = Signal(object)  # (page, xref) ou None

@@ -121,7 +121,7 @@ def _draws_all(font: pymupdf.Font, chars: str) -> bool:
 def _original_font(doc: PdfDocument, page: int, font: str,
                    text: str) -> tuple[bytes | None, str]:
     """(police intégrée d'origine, "ok") si elle dessine tous les caractères de `text` ;
-    sinon (None, "partielle") ou (None, "absente") — police non intégrée au fichier."""
+    sinon (None, "partielle") ou (None, "absente") - police non intégrée au fichier."""
     with pdf_lock:
         p = doc.doc[page]
         for xref, _ext, _type, basefont, *_ in p.get_fonts():
