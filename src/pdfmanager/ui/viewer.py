@@ -43,10 +43,12 @@ class Tool(Enum):
     ARROW = "Flèche"
     INK = "Dessin à main levée"
     STAMP = "Tampon"
+    CROP = "Recadrer"  # pas un commentaire : géré par l'organisation des pages
 
 
 TEXT_TOOLS = {Tool.SELECT, Tool.HIGHLIGHT, Tool.UNDERLINE, Tool.STRIKEOUT}
-DRAG_TOOLS = {Tool.FREETEXT, Tool.RECT, Tool.ELLIPSE, Tool.LINE, Tool.ARROW, Tool.STAMP}
+DRAG_TOOLS = {Tool.FREETEXT, Tool.RECT, Tool.ELLIPSE, Tool.LINE, Tool.ARROW, Tool.STAMP,
+              Tool.CROP}
 
 
 class ViewMode(Enum):
@@ -317,16 +319,28 @@ class PdfView(QGraphicsView):
         if tool is not Tool.SELECT:
             self.select_annot(None)
 
-    def refresh(self) -> None:
-        """Après une modification du document : rendus à refaire, annotation à revalider."""
+    def refresh(self, structural: bool = False) -> None:
+        """Après une modification du document : rendus à refaire, annotation à revalider.
+        `structural` : pages ajoutées, retirées, réordonnées ou recadrées."""
         self._words.clear()
+        n = self.doc.page_count
+        if structural:
+            self.cache = ImageCache()  # un ancien aperçu montrerait une autre page
+            self.selection, self._sel_page, self._sel_start, self._drag = [], None, None, None
+            if n != len(self.items_):
+                for item in self.items_:
+                    self.scene().removeItem(item)
+                self.items_ = [PageItem(self, i) for i in range(n)]
+                for item in self.items_:
+                    self.scene().addItem(item)
+            self.current_page = min(self.current_page, n - 1)
         if self.selected_annot:
             page, xref, _, kind = self.selected_annot
-            rect = A.annot_rect(self.doc, page, xref)
+            rect = A.annot_rect(self.doc, page, xref) if page < n else None
             self.selected_annot = (page, xref, rect, kind) if rect else None
             if rect is None:
                 self.annot_selected.emit(None)
-        self.viewport().update()
+        self._relayout()  # tailles de page modifiées (rotation, recadrage…)
 
     def select_annot(self, target: tuple[int, int] | None, *, reveal: bool = False) -> None:
         """Sélectionne l'annotation (page, xref), ou désélectionne avec None."""
@@ -363,7 +377,8 @@ class PdfView(QGraphicsView):
         key, img = result
         self.cache.put(key, img)
         self._pending.discard(key)
-        self.items_[key[0]].update()
+        if key[0] < len(self.items_):  # la page a pu être supprimée entre-temps
+            self.items_[key[0]].update()
 
     def paint_page(self, item: PageItem, painter: QPainter) -> None:
         i, rect = item.index, item.boundingRect()
@@ -413,7 +428,7 @@ class PdfView(QGraphicsView):
         elif self.tool is Tool.ELLIPSE:
             painter.drawEllipse(rect)
         else:
-            if self.tool in (Tool.FREETEXT, Tool.STAMP):
+            if self.tool in (Tool.FREETEXT, Tool.STAMP, Tool.CROP):
                 pen.setStyle(Qt.PenStyle.DashLine)
                 painter.setPen(pen)
             painter.drawRect(rect)

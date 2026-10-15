@@ -4,7 +4,6 @@ par PdfView et les actions du panneau Commentaires en opérations de core.annota
 from __future__ import annotations
 
 import getpass
-import logging
 
 import pymupdf
 from PySide6.QtCore import QObject, QSettings
@@ -15,15 +14,12 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QMainWindow,
     QMenu,
-    QMessageBox,
     QToolBar,
     QToolButton,
 )
 
 from pdfmanager.core import annotations as A
 from pdfmanager.ui.viewer import PdfView, Tool
-
-log = logging.getLogger(__name__)
 
 DEFAULT_COLORS = {
     Tool.HIGHLIGHT: "#ffeb3b", Tool.UNDERLINE: "#1e88e5", Tool.STRIKEOUT: "#e53935",
@@ -56,8 +52,9 @@ class Annotator(QObject):
             a = QAction(tool.value, self)
             a.setCheckable(True)
             a.setData(tool)
-            self.group.addAction(a)
-            self.toolbar.addAction(a)
+            self.group.addAction(a)  # exclusif avec tous les outils, recadrage compris
+            if tool is not Tool.CROP:  # le recadrage vit dans le menu Pages
+                self.toolbar.addAction(a)
             window.addAction(a)  # raccourcis actifs partout dans la fenêtre
             self.actions[tool] = a
             if tool is Tool.HAND:
@@ -155,7 +152,7 @@ class Annotator(QObject):
         c = tab.sidebar.comments
         v.drawn.connect(lambda tool, page, data: self._on_drawn(tab, tool, page, data))
         v.annot_moved.connect(
-            lambda page, xref, dx, dy: self._apply(tab, A.move, page, xref, dx, dy, self.author))
+            lambda page, xref, dx, dy: tab.apply(A.move, page, xref, dx, dy, self.author))
         v.annot_edit_requested.connect(lambda page, xref: self.edit_content(tab, page, xref))
         v.annot_selected.connect(c.select)
         c.activated.connect(lambda page, xref: v.select_annot((page, xref), reveal=True))
@@ -165,26 +162,18 @@ class Annotator(QObject):
 
     # ----- opérations ---------------------------------------------------------------------
 
-    def _apply(self, tab, fn, *args):
-        try:
-            return fn(tab.doc, *args)
-        except Exception as e:
-            log.exception("Échec de %s", fn.__name__)
-            QMessageBox.warning(self.window, "Commentaires", str(e))
-            return None
-        finally:
-            tab.changed()
-
     def _on_drawn(self, tab, tool: Tool, page: int, data) -> None:
+        if tool is Tool.CROP:
+            return  # traité par l'organisation des pages
         rgb, width, author = _rgb(self.color(tool)), self.width_spin.value(), self.author
         if tool in MARKUP_KIND:
-            self._apply(tab, A.add_markup, page, MARKUP_KIND[tool], data, rgb, author)
+            tab.apply(A.add_markup, page, MARKUP_KIND[tool], data, rgb, author)
         elif tool is Tool.NOTE:
             txt, ok = QInputDialog.getMultiLineText(self.window, "Note", "Texte de la note :")
             if ok:
-                self._apply(tab, A.add_note, page, data, txt, rgb, author)
+                tab.apply(A.add_note, page, data, txt, rgb, author)
         elif tool is Tool.INK:
-            self._apply(tab, A.add_ink, page, data, rgb, width, author)
+            tab.apply(A.add_ink, page, data, rgb, width, author)
         else:
             start, end = data
             rect = pymupdf.Rect(start, end).normalize()
@@ -193,13 +182,13 @@ class Annotator(QObject):
                     rect = pymupdf.Rect(start, start + (200, 40))
                 txt, ok = QInputDialog.getMultiLineText(self.window, "Texte libre", "Texte :")
                 if ok and txt.strip():
-                    self._apply(tab, A.add_freetext, page, rect, txt, rgb, author)
+                    tab.apply(A.add_freetext, page, rect, txt, rgb, author)
             elif tool is Tool.STAMP:
                 if rect.width < 10 or rect.height < 10:
                     rect = pymupdf.Rect(start, start + (150, 50))
-                self._apply(tab, A.add_stamp, page, rect, self.stamp, author)
+                tab.apply(A.add_stamp, page, rect, self.stamp, author)
             elif abs(end.x - start.x) + abs(end.y - start.y) >= 2:  # ignore un simple clic
-                self._apply(tab, A.add_shape, page, SHAPE_KIND[tool], start, end, rgb, width,
+                tab.apply(A.add_shape, page, SHAPE_KIND[tool], start, end, rgb, width,
                             author)
 
     def edit_content(self, tab, page: int, xref: int) -> None:
@@ -210,15 +199,15 @@ class Annotator(QObject):
         txt, ok = QInputDialog.getMultiLineText(self.window, info.label, "Commentaire :",
                                                 info.content)
         if ok and txt != info.content:
-            self._apply(tab, A.set_content, page, xref, txt, self.author)
+            tab.apply(A.set_content, page, xref, txt, self.author)
 
     def change_color(self, tab, page: int, xref: int) -> None:
         c = QColorDialog.getColor(parent=self.window, title="Couleur du commentaire")
         if c.isValid():
-            self._apply(tab, A.set_color, page, xref, _rgb(c), self.author)
+            tab.apply(A.set_color, page, xref, _rgb(c), self.author)
 
     def delete(self, tab, page: int, xref: int) -> None:
-        self._apply(tab, A.delete, page, xref)
+        tab.apply(A.delete, page, xref)
 
     def delete_selected(self) -> None:
         if self.tab and self.tab.view.selected_annot:

@@ -39,3 +39,30 @@ def isolated_settings(tmp_path):
     """QSettings dans un dossier temporaire : les tests ne touchent pas la config réelle."""
     QSettings.setDefaultFormat(QSettings.Format.IniFormat)
     QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, str(tmp_path / "cfg"))
+
+
+@pytest.fixture(autouse=True)
+def no_unexpected_dialogs(monkeypatch):
+    """Un dialogue modal non prévu bloquerait le test indéfiniment (et la CI avec) :
+    il échoue immédiatement en indiquant son titre. Un test qui attend un dialogue
+    le remplace par sa propre réponse avec monkeypatch.setattr."""
+    from PySide6.QtWidgets import (
+        QColorDialog,
+        QDialog,
+        QFileDialog,
+        QInputDialog,
+        QMessageBox,
+    )
+
+    def unexpected(*args, **kwargs):
+        strings = [a for a in args if isinstance(a, str)]
+        raise AssertionError(f"Dialogue inattendu : {' — '.join(strings) or args}")
+
+    for cls, names in ((QMessageBox, ("critical", "warning", "information", "question")),
+                       (QInputDialog, ("getText", "getMultiLineText", "getItem")),
+                       (QFileDialog, ("getOpenFileName", "getOpenFileNames",
+                                      "getSaveFileName", "getExistingDirectory")),
+                       (QColorDialog, ("getColor",)),
+                       (QDialog, ("exec",))):
+        for name in names:
+            monkeypatch.setattr(cls, name, unexpected)
