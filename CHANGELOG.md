@@ -2,6 +2,12 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [0.3.1] — 2026-10-15
+
+### Corrigé
+- Un rendu (page ou vignette) demandé juste avant une suppression de pages échouait en
+  arrière-plan et remplissait le journal d'erreurs ; il est désormais ignoré proprement.
+
 ## [0.3.0] — 2026-10-15
 
 Phase 3 — organisation des pages.
