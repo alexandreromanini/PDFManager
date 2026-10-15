@@ -2,6 +2,15 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [0.8.3] - 2026-10-15
+
+### Corrigé
+- **Modifier un texte reconnu par OCR** écrivait le nouveau texte par-dessus l'ancien, resté
+  visible dans l'image scannée. La ligne est désormais effacée de l'image (couleur du papier
+  relevée autour) puis réécrite en clair, dans la couleur de l'encre du scan et à une taille
+  calée sur la largeur de la ligne d'origine ; l'application signale que l'aspect diffère du
+  scan. Plus d'avertissement « plusieurs styles » erroné sur ces lignes.
+
 ## [0.8.2] - 2026-10-15
 
 ### Corrigé

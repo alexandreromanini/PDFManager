@@ -19,7 +19,7 @@ Modifier un texte existant, et ses limites (signalées à l'utilisateur) :
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import pymupdf
 
@@ -43,6 +43,8 @@ class Line:
     flags: int
     rotate: int  # sens d'écriture, multiple de 90°
     mixed: bool  # plusieurs polices / tailles / couleurs dans la ligne
+    invisible: bool = False  # texte invisible posé sur une image (OCR)
+    fill: Color | None = None  # fond du papier, pour effacer la ligne de l'image scannée
 
 
 @dataclass(frozen=True)
@@ -89,12 +91,13 @@ def text_block_at(doc: PdfDocument, page: int, point: pymupdf.Point) -> TextBloc
             if rotate is None:
                 raise ValueError("Texte incliné : modification non prise en charge.")
             styles = {(s["font"], round(s["size"], 1), s["color"]) for s in spans}
+            invisible = all(s.get("alpha", 255) == 0 for s in spans)  # couche OCR
             # Trait d'union conditionnel (U+00AD) : invisible à la saisie, c'est un « - ».
             line_text = "".join(s["text"] for s in li["spans"]).rstrip().replace("\xad", "-")
             lines.append(Line(pymupdf.Rect(li["bbox"]), pymupdf.Point(first["origin"]),
                               line_text, first["size"],
                               first["font"], _rgb(first["color"]), first["flags"], rotate,
-                              len(styles) > 1))
+                              len(styles) > 1 and not invisible, invisible))
         if lines:
             return TextBlock(page, pymupdf.Rect(b["bbox"]), tuple(lines))
     return None
@@ -201,10 +204,17 @@ def _rewrite(doc: PdfDocument, block: TextBlock, lines: list[str], fontname: str
                if not same or lines[k] != line.text]
     with doc.edit("Modifier le texte") as d:
         p = d[block.page]
-        for k in targets:  # bandes resserrées : ne pas toucher les lignes voisines
-            r, h = block.lines[k].rect, block.lines[k].rect.height
-            p.add_redact_annot(pymupdf.Rect(r.x0, r.y0 + h * 0.2, r.x1, r.y1 - h * 0.2))
-        p.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE,
+        scanned = False
+        for k in targets:
+            line = block.lines[k]
+            r, h = line.rect, line.rect.height
+            if line.invisible:  # OCR : la ligne de l'image s'efface, couleur du papier
+                scanned = True
+                p.add_redact_annot(r + (-1.5, -h * 0.15, 1.5, h * 0.15), fill=line.fill)
+            else:  # bandes resserrées : ne pas toucher les lignes voisines
+                p.add_redact_annot(pymupdf.Rect(r.x0, r.y0 + h * 0.2, r.x1, r.y1 - h * 0.2))
+        p.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_PIXELS if scanned
+                           else pymupdf.PDF_REDACT_IMAGE_NONE,
                            graphics=pymupdf.PDF_REDACT_LINE_ART_NONE,
                            text=pymupdf.PDF_REDACT_TEXT_REMOVE)
         if buffer is not None:
@@ -247,6 +257,38 @@ def _rewrite(doc: PdfDocument, block: TextBlock, lines: list[str], fontname: str
     return overflow
 
 
+def _scan_colors(doc: PdfDocument, page: int, rect: pymupdf.Rect) -> tuple[Color, Color]:
+    """(encre, papier) relevés sur l'image autour d'une ligne scannée."""
+    with pdf_lock:
+        pix = doc.doc[page].get_pixmap(clip=rect + (-3, -3, 3, 3), dpi=144, annots=False,
+                                       alpha=False)
+    w, h, n, data = pix.width, pix.height, pix.n, pix.samples
+    px = [tuple(data[i:i + 3]) for i in range(0, len(data) - n + 1, n)]
+    border = [px[y * w + x] for y in range(h) for x in range(w)
+              if y < 3 or y >= h - 3 or x < 3 or x >= w - 3]
+    paper = tuple(sorted(c[i] for c in border)[len(border) // 2] / 255 for i in range(3))
+    inside = sorted(px, key=sum)[: max(1, len(px) // 20)]  # 5 % les plus foncés
+    ink = tuple(sum(c[i] for c in inside) / len(inside) / 255 for i in range(3))
+    return ink, paper
+
+
+def _from_scan(doc: PdfDocument, block: TextBlock, changed: list[int]) -> TextBlock:
+    """Lignes reconnues par OCR à réécrire en clair : couleur de l'encre et du papier
+    relevées sur l'image, taille calée sur la largeur de la ligne d'origine (la taille du
+    texte invisible n'est que la hauteur des lettres)."""
+    lines = list(block.lines)
+    measure = pymupdf.Font("helv")
+    for k in changed:
+        line = lines[k]
+        if not line.invisible:
+            continue
+        ink, paper = _scan_colors(doc, block.page, line.rect)
+        size = line.rect.width / max(measure.text_length(line.text, 1), 0.01)
+        size = min(max(size, line.rect.height * 0.8), line.rect.height * 1.6)
+        lines[k] = replace(line, size=size, color=ink, fill=paper)
+    return replace(block, lines=tuple(lines))
+
+
 def edit_block(doc: PdfDocument, block: TextBlock, new_text: str) -> list[str]:
     """Remplace le texte du bloc. Renvoie les avertissements à montrer à l'utilisateur."""
     lines = [s.rstrip() for s in new_text.split("\n")]
@@ -256,8 +298,13 @@ def edit_block(doc: PdfDocument, block: TextBlock, new_text: str) -> list[str]:
     changed = [k for k, line in enumerate(block.lines) if not same or lines[k] != line.text]
     if not changed:
         return []
-    first = block.lines[changed[0]]
     warnings = []
+    if any(block.lines[k].invisible for k in changed):
+        block = _from_scan(doc, block, changed)
+        warnings.append("Texte reconnu par OCR : la ligne est effacée de l'image scannée et "
+                        "réécrite en clair, dans une police standard (aspect différent du "
+                        "scan).")
+    first = block.lines[changed[0]]
     if any(block.lines[k].mixed for k in changed):
         warnings.append("Une ligne mêlait plusieurs styles (gras, couleur, taille…) : le "
                         "style de son premier mot s'applique désormais à toute la ligne.")
