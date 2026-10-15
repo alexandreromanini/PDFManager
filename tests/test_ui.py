@@ -1,0 +1,94 @@
+from conftest import PASSWORD
+from PySide6.QtWidgets import QInputDialog
+
+from pdfmanager.app import selftest
+from pdfmanager.ui.main_window import MainWindow
+from pdfmanager.ui.viewer import FitMode, ViewMode
+
+
+def _window(qtbot):
+    win = MainWindow()
+    qtbot.addWidget(win)
+    win.resize(1000, 800)
+    win.show()
+    return win
+
+
+def test_open_render_navigate(qtbot, sample_pdf):
+    win = _window(qtbot)
+    tab = win.open_path(sample_pdf)
+    view = tab.view
+    qtbot.waitUntil(lambda: len(view.cache) > 0, timeout=5000)
+    assert win.windowTitle().startswith("Été déjà vu.pdf")
+
+    view.go_to_page(2)
+    assert view.current_page == 2
+    assert win.page_spin.value() == 3
+
+    for mode in ViewMode:
+        view.set_mode(mode)
+        assert view.current_page == 2
+    view.set_mode(ViewMode.SINGLE)
+    assert sum(item.isVisible() for item in view.items_) == 1
+
+    view.set_zoom(2.0)
+    assert win.zoom_combo.currentText() == "200 %"
+    view.set_fit(FitMode.PAGE)
+    assert view.items_[2].size.height() <= view.viewport().height()
+    view.rotate(90)
+    assert view.rotation == 90 and view.items_[2].size.width() > view.items_[2].size.height()
+
+
+def test_same_file_opens_once(qtbot, sample_pdf):
+    win = _window(qtbot)
+    win.open_path(sample_pdf)
+    win.open_path(sample_pdf)
+    assert win.tabs.count() == 1
+    win.close_tab(0)
+    assert win.tabs.count() == 0 and not win.act_print.isEnabled()
+
+
+def test_search_highlights(qtbot, sample_pdf):
+    win = _window(qtbot)
+    tab = win.open_path(sample_pdf)
+    tab.search("renard")
+    qtbot.waitUntil(lambda: tab.search_done, timeout=5000)
+    assert len(tab.results) == 3
+    assert sorted(tab.view.hits) == [0, 1, 2]
+    tab.search("renard")  # même requête : résultat suivant
+    assert tab.result_index == 1
+
+
+def test_sidebar(qtbot, sample_pdf):
+    win = _window(qtbot)
+    tab = win.open_path(sample_pdf)
+    assert tab.sidebar.model.rowCount() == 3
+    qtbot.waitUntil(lambda: len(tab.sidebar.model.pixmaps) > 0, timeout=5000)
+    assert tab.sidebar.bookmarks.topLevelItemCount() == 2
+    tab.sidebar.page_requested.emit(1)
+    assert tab.view.current_page == 1
+
+
+def test_password_prompt(qtbot, encrypted_pdf, monkeypatch):
+    answers = iter([("faux", True), (PASSWORD, True)])
+    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: next(answers))
+    win = _window(qtbot)
+    assert win.open_path(encrypted_pdf) is not None
+
+
+def test_password_cancel(qtbot, encrypted_pdf, monkeypatch):
+    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("", False))
+    win = _window(qtbot)
+    assert win.open_path(encrypted_pdf) is None
+
+
+def test_recent_files(qtbot, sample_pdf):
+    win = _window(qtbot)
+    win.open_path(sample_pdf)
+    assert win.settings.value("recent", [], type=list) == [str(sample_pdf)]
+
+
+def test_selftest(qtbot):
+    win = MainWindow()
+    qtbot.addWidget(win)
+    assert selftest(win) == 0
