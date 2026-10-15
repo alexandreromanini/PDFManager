@@ -42,7 +42,7 @@ def size_text(n: int) -> str:
 # ----- dialogues ---------------------------------------------------------------------------
 
 class OcrDialog(_Dialog):
-    def __init__(self, parent, page_count: int) -> None:
+    def __init__(self, parent, page_count: int, signed: bool = False) -> None:
         super().__init__(parent, "Reconnaître le texte (OCR)")
         self.language = QComboBox()
         for key, label in ocr.LANGUAGES.items():
@@ -61,7 +61,9 @@ class OcrDialog(_Dialog):
         self.form.addRow("Résolution d'analyse :", self.dpi)
         self.layout_.insertWidget(0, QLabel(
             "Ajoute aux pages scannées un texte invisible, aligné sur l'image : recherche,\n"
-            "sélection et copie deviennent possibles. L'aspect des pages ne change pas."))
+            "sélection et copie deviennent possibles. L'aspect des pages ne change pas."
+            + ("\n\nCe document est signé : la signature restera valide, mais le texte\n"
+               "ajouté sera signalé comme une modification postérieure." if signed else "")))
         self.finish()
 
     def validate(self) -> None:
@@ -238,7 +240,7 @@ class Tools(QObject):
     # ----- outils sur le document -------------------------------------------------------------
 
     def ocr(self, tab) -> None:
-        dlg = OcrDialog(self.window, tab.doc.page_count)
+        dlg = OcrDialog(self.window, tab.doc.page_count, tab.doc.incremental)
         if dlg.exec() != OcrDialog.DialogCode.Accepted:
             return
         todo = ocr.pages_to_process(tab.doc, dlg.pages.pages(), dlg.all_pages.isChecked())

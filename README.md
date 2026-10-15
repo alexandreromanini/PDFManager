@@ -14,7 +14,7 @@ Usage strictement personnel (PyMuPDF est sous AGPL).
 | 3 | Organisation des pages | ✅ 0.3.1 |
 | 4 | Édition, caviardage | ✅ 0.4.0 |
 | 5 | Formulaires, signatures | ✅ 0.5.0 |
-| 6 | OCR, compression, conversions, PDF/A | ✅ 0.6.0 |
+| 6 | OCR, compression, conversions, PDF/A | ✅ 0.6.1 |
 
 ## Développement (Linux)
 
