@@ -9,7 +9,7 @@ Usage strictement personnel (PyMuPDF est sous AGPL).
 | Phase | Contenu | État |
 |---|---|---|
 | 1 | Lecteur, CI Windows | ✅ 0.1.0 |
-| 2 | Annotations, annuler/rétablir, enregistrement | ✅ 0.2.1 |
+| 2 | Annotations, annuler/rétablir, enregistrement | ✅ 0.2.2 |
 | 3 | Organisation des pages | — |
 | 4 | Édition, caviardage | — |
 | 5 | Formulaires, signatures | — |
