@@ -183,6 +183,7 @@ class PdfView(QGraphicsView):
         self.pool.setMaxThreadCount(1)
 
         self.hits: dict[int, list[pymupdf.Rect]] = {}
+        self.hit_color = HIT_COLOR  # la comparaison colore ajouts et suppressions
         self.current_hit: tuple[int, pymupdf.Rect] | None = None
         self.tool = Tool.SELECT
         self.tool_color = QColor("red")
@@ -441,7 +442,7 @@ class PdfView(QGraphicsView):
             if not f.signed:
                 painter.fillRect(to_qrect(f.rect, m), FIELD_COLOR)
         for r in self.hits.get(i, ()):
-            painter.fillRect(to_qrect(r, m), HIT_COLOR)
+            painter.fillRect(to_qrect(r, m), self.hit_color)
         if self.current_hit and self.current_hit[0] == i:
             painter.fillRect(to_qrect(self.current_hit[1], m), CURRENT_HIT_COLOR)
         if self._sel_page == i:

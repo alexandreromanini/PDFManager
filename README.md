@@ -1,6 +1,7 @@
 # PDFManager
 
-Lecteur/éditeur PDF personnel façon Acrobat Pro — Python 3.12, PySide6, PyMuPDF, pyHanko.
+Lecteur/éditeur PDF personnel façon Acrobat Pro — Python 3.12, PySide6, PyMuPDF, pyHanko,
+pikepdf, pdf2docx.
 Développé sous Linux, distribué pour Windows 11 (installeur autonome, Python non requis).
 Usage strictement personnel (PyMuPDF est sous AGPL).
 
@@ -13,7 +14,7 @@ Usage strictement personnel (PyMuPDF est sous AGPL).
 | 3 | Organisation des pages | ✅ 0.3.1 |
 | 4 | Édition, caviardage | ✅ 0.4.0 |
 | 5 | Formulaires, signatures | ✅ 0.5.0 |
-| 6 | OCR, compression, conversions, PDF/A | — |
+| 6 | OCR, compression, conversions, PDF/A | ✅ 0.6.0 |
 
 ## Développement (Linux)
 
@@ -40,6 +41,11 @@ powershell -ExecutionPolicy Bypass -File packaging\build.ps1   # -SkipTests pour
 Résultat : `dist\PDFManager-<version>-setup.exe`. L'installation se fait par utilisateur, sans
 droits admin. La case « Associer les fichiers .pdf » ajoute PDFManager au menu *Ouvrir avec* ;
 Windows 11 exige ensuite de choisir « Toujours » une fois pour en faire le lecteur par défaut.
+
+**Programmes facultatifs** (détectés, non embarqués ; *Aide → Outils externes détectés*) :
+[Ghostscript](https://ghostscript.com/releases/gsdnld.html) pour le PDF/A,
+[LibreOffice](https://fr.libreoffice.org/download/telecharger-libreoffice/) pour convertir les
+documents Office. L'OCR (Tesseract, modèles français et anglais) est intégré.
 
 Journal : `%APPDATA%\PDFManager\pdfmanager.log` (Linux : `~/.local/share/PDFManager/`),
 accessible via *Aide → Ouvrir le dossier des journaux*.
@@ -113,6 +119,29 @@ Barre **Modifier** (3ᵉ ligne) ou menu **Modifier** :
 L'enregistrement passe toujours par un nettoyage (ramasse-miettes) : les objets devenus
 inutiles, comme l'image d'origine sous un caviardage, ne restent pas dans le fichier.
 Exception : un document **signé** s'enregistre par ajout (voir Signer).
+
+### Outils, export, création
+
+- **Outils → Reconnaître le texte (OCR)** : rend recherchable et sélectionnable le texte des
+  pages scannées (texte invisible posé sur l'image ; l'aspect ne change pas). Par défaut,
+  seules les pages sans texte sont analysées. Plusieurs pages en parallèle ; Annuler arrête
+  tout de suite ; Ctrl+Z retire le texte ajouté.
+- **Réduire la taille du fichier** : *sans perte* (structure, polices réduites aux
+  caractères utilisés), *équilibré* (images ramenées à 150 dpi), *maximal* (96 dpi).
+  Écrit une copie (« … - réduit.pdf ») et affiche le gain.
+- **Protéger par mot de passe** : mot de passe d'ouverture, et/ou restrictions (impression,
+  copie, commentaires, modification) levées par un mot de passe des permissions.
+  S'applique au fichier à l'enregistrement. **Retirer la protection** : demande le mot de
+  passe des permissions si le document a été ouvert avec celui d'ouverture.
+- **Comparer avec un autre PDF** : différences de texte, avant (rouge) / après (vert).
+- **Enregistrer en PDF/A (archivage)** : copie PDF/A-2b contrôlée avant écriture.
+- **Réparer un PDF endommagé** : ouvre et reconstruit le fichier ; « Enregistrer sous… »
+  pour garder la version réparée. Tout fichier endommagé est d'ailleurs réparé à l'ouverture
+  (message dans la barre d'état).
+- **Fichier → Exporter** : images (une par page), Word (.docx), texte (.txt, UTF-8).
+  **Fichier → Créer un PDF** : à partir d'images (une page A4 par image) ou de documents
+  Office (PDF écrit à côté de chaque document, puis ouvert).
+- **Fichier → Propriétés du document** (Ctrl+D) : titre, auteur, sujet, mots-clés.
 
 ### Formulaires
 
@@ -195,6 +224,28 @@ d'apparence (/AP) : vérifié par un moteur de rendu indépendant (Ghostscript).
 - **Chemins longs** (> 260 caractères) gérés pour la lecture/écriture ; les boîtes de dialogue
   Windows elles-mêmes peuvent les refuser si `LongPathsEnabled` n'est pas activé.
 - Ouvrir un second PDF depuis l'Explorateur lance une seconde fenêtre (pas d'instance unique).
+- **OCR** : français et anglais seulement ; texte invisible écrit en Helvetica (alphabet
+  latin : les autres caractères deviennent « ? ») ; qualité dépendante du scan (modèles
+  *tessdata_fast*, rapides mais un peu moins précis que les modèles « best »). Pages déjà
+  pourvues de texte ignorées par défaut (sinon texte doublé). Plusieurs secondes par page.
+- **Réduction de taille** : gain surtout sur les images ; un PDF de texte pur réduit peu.
+  Un document signé perd ses signatures dans la copie réduite.
+- **Protection** : les restrictions (impression, copie…) ne sont respectées que par les
+  logiciels qui le veulent bien — seul le mot de passe d'ouverture protège vraiment.
+- **PDF/A** : niveau 2b uniquement (pas 1b, 3b, ni accessibilité « a »). Sans Ghostscript,
+  seuls les documents déjà presque conformes passent. Ghostscript retire les commentaires non
+  imprimables ; le validateur intégré (pikepdf) refuse tout ce qu'il ne sait pas garantir,
+  y compris parfois un document en réalité conforme ; pour une validation officielle :
+  [veraPDF](https://verapdf.org).
+- **PDF → Word** : mise en page reconstruite par pdf2docx, approximative pour les documents
+  complexes (colonnes, tableaux imbriqués) ; une page scannée devient une image (le texte
+  invisible de l'OCR n'est pas repris).
+- **Office → PDF** : nécessite LibreOffice ; le rendu est celui de LibreOffice (polices
+  Microsoft absentes remplacées).
+- **Comparaison** : texte seulement (ni images, ni mise en page, ni commentaires), casse
+  comprise ; deux longs documents très différents peuvent demander quelques minutes.
+- **Installeur** : environ 2 fois plus gros depuis la 0.6.0 (pdf2docx entraîne OpenCV et
+  NumPy, plus de 100 Mo une fois installés).
 - **Formulaires** : les actions JavaScript (calculs, formats, validations, boutons) ne sont
   pas exécutées. Création limitée à texte, case, liste déroulante et signature (pas de
   boutons radio ni de zone de liste), sans réglage des propriétés (police, obligatoire…) ;
@@ -224,7 +275,11 @@ d'apparence (/AP) : vérifié par un moteur de rendu indépendant (Ghostscript).
 ```
 src/pdfmanager/
   core/      logique PDF pure, sans Qt (document + historique annuler/rétablir, texte,
-             annotations, pages, édition, formulaires, signatures)
+             annotations, pages, édition, formulaires, signatures, OCR, sécurité,
+             optimisation, conversions, comparaison)
+  services/  processus de calcul (OCR, compression, Word), programmes externes
+             (Ghostscript, LibreOffice), tâches longues complètes
+  resources/ modèles Tesseract fra + eng (tessdata_fast 4.1.0, Apache-2.0)
   ui/        widgets Qt (fenêtre, vue, panneau latéral, barres Commenter / Modifier /
              Formulaires, menus Pages / Signer, tâches de fond)
   app.py     point d'entrée, journalisation, --selftest
@@ -262,3 +317,15 @@ tests/       pytest + pytest-qt (PDF de test générés à la volée)
   document protégé.
 - **Autorités de confiance** : `ssl` charge le magasin racine de Windows ; sous Linux il ne liste
   pas les dossiers de certificats, d'où certifi en complément.
+- **Processus de calcul** (`services/processes.py`) : PyMuPDF garde le GIL pendant ses appels ;
+  OCR, compression et conversion Word tournent donc dans des processus (`spawn`), avec
+  progression et arrêt immédiat. L'exécutable appelle `multiprocessing.freeze_support()`.
+- **OCR** : `Pixmap.pdfocr_tobytes` de PyMuPDF 1.28 produit un PDF sans texte ; on reconnaît
+  avec `get_textpage_ocr` et on écrit soi-même le texte invisible (opérateurs PDF, matrice
+  écran → PDF fournie par `pdf_page_transform` de MuPDF : `Page.transformation_matrix` est
+  fausse sur une page à la fois recadrée et tournée).
+- **Chiffrement** : dans PyMuPDF 1.28, `needs_pass` ou un `authenticate` raté sur un document
+  déjà déverrouillé remplacent la clé de déchiffrement (contenu illisible). Ces appels ne sont
+  faits qu'avant le déverrouillage, ou sur une copie (`PdfDocument._reopen`).
+- **PDF/A** : Ghostscript (polices, couleurs) puis `pikepdf.pdfa` (profil sRGB, XMP,
+  validation des octets écrits) : jamais de faux PDF/A.

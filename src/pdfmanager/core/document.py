@@ -35,6 +35,10 @@ class PdfError(Exception):
     """Erreur présentable telle quelle à l'utilisateur."""
 
 
+class Cancelled(Exception):
+    """Opération longue abandonnée par l'utilisateur."""
+
+
 def long_path(path: str | os.PathLike[str], *, windows: bool = os.name == "nt") -> str:
     """Chemin absolu utilisable même au-delà de 260 caractères sous Windows (préfixe \\\\?\\)."""
     s = os.fspath(path)
@@ -61,22 +65,37 @@ class PdfDocument:
         try:
             with open(long_path(self.path), "rb") as f:
                 data = f.read()
-            self.doc = pymupdf.open(stream=data, filetype="pdf")
-        except (OSError, RuntimeError) as e:  # pymupdf.FileDataError hérite de RuntimeError
+        except OSError as e:
             raise PdfError(f"Impossible d'ouvrir « {self.path.name} » :\n{e}") from e
+        # repaired : fichier endommagé, reconstruit en mémoire (enregistrer pour le garder)
+        self.doc, self.repaired = _open_repairing(data, self.path.name)
         self.version = 0  # incrémenté à chaque modification : invalide les rendus en cache
-        self._password: str | None = None  # gardé en mémoire pour rouvrir une copie chiffrée
         # Historique annuler/rétablir : (libellé, ancien, nouveau). ancien/nouveau = None
         # pour une étape du journal MuPDF ; sinon les deux objets Document échangés.
         self._history: list[tuple[str, pymupdf.Document | None, pymupdf.Document | None]] = []
         self._pos = 0  # nombre d'entrées actuellement appliquées
         self._saved = 0  # valeur de _pos au dernier enregistrement (-1 : hors historique)
-        # Document signé : enregistrement par ajout (mise à jour incrémentale), sans quoi les
-        # signatures seraient invalidées. Le caviardage et le nettoyage le désactivent : le
-        # contenu retiré resterait lisible dans la version d'origine, conservée en tête.
-        self.incremental = False
         if not self.doc.needs_pass:
-            self.incremental = is_signed(self.doc)
+            self.incremental = is_signed(self.doc) and not self.repaired
+
+    # Mot de passe et mode d'enregistrement suivent chaque version du document (objet
+    # pymupdf.Document) : annuler une protection ou une compression les restaure aussi.
+
+    @property
+    def _password(self) -> str | None:
+        """Mot de passe qui a ouvert cette version, pour en rouvrir une copie chiffrée."""
+        return getattr(self.doc, "pdfm_password", None)
+
+    @property
+    def incremental(self) -> bool:
+        """Document signé : enregistrement par ajout (mise à jour incrémentale), sans quoi
+        les signatures seraient invalidées. Le caviardage et le nettoyage le désactivent :
+        le contenu retiré resterait lisible dans la version d'origine, conservée en tête."""
+        return getattr(self.doc, "pdfm_incremental", False)
+
+    @incremental.setter
+    def incremental(self, value: bool) -> None:
+        self.doc.pdfm_incremental = value
 
     # ----- édition -----------------------------------------------------------------------
     # Deux mécanismes, une seule pile :
@@ -113,14 +132,32 @@ class PdfDocument:
         """Applique `fn` à une copie du document, qui le remplace si `fn` réussit.
         ponytail: une copie complète en mémoire par opération de ce type, sans limite."""
         with pdf_lock:
-            new = pymupdf.open("pdf", incremental_bytes(self.doc) if self.incremental
+            new = self._reopen(incremental_bytes(self.doc) if self.incremental
                                else self.doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_KEEP))
-            if new.needs_pass:
-                new.authenticate(self._password or "")
+            new.pdfm_incremental = self.incremental
             fn(new)  # en cas d'exception, le document courant n'a pas bougé
-            new.journal_enable()
-            old, self.doc = self.doc, new
-            self._push((label, old, new))
+            self._install(label, new)
+
+    def swap(self, label: str, data: bytes, password: str | None = None) -> None:
+        """Le document devient `data` (protection, sa suppression…), de façon annulable.
+        `password` : celui qui ouvre `data` s'il est chiffré (sinon l'actuel)."""
+        with pdf_lock:
+            self._install(label, self._reopen(data, password))
+
+    def _reopen(self, data: bytes, password: str | None = None) -> pymupdf.Document:
+        """ATTENTION (PyMuPDF 1.28) : sur un document déverrouillé, `needs_pass` ou un
+        `authenticate` raté remplacent la clé de déchiffrement : le contenu devient
+        illisible. On ne les appelle donc qu'avant le déverrouillage."""
+        new = pymupdf.open("pdf", data)
+        new.pdfm_password = password if password is not None else self._password
+        if new.needs_pass and not new.authenticate(new.pdfm_password or ""):
+            raise PdfError("Mot de passe incorrect pour le document produit.")
+        return new
+
+    def _install(self, label: str, new: pymupdf.Document) -> None:
+        new.journal_enable()
+        old, self.doc = self.doc, new
+        self._push((label, old, new))
         self._changed()
 
     def _journal_step(self) -> int:
@@ -200,13 +237,20 @@ class PdfDocument:
                          for i in range(self.doc.page_count))
 
     @property
+    def encrypted(self) -> bool:
+        """Fichier chiffré (même déverrouillé). Sans toucher à la clé (voir _reopen)."""
+        return bool((self.doc.metadata or {}).get("encryption"))
+
+    @property
     def needs_password(self) -> bool:
         return bool(self.doc.is_encrypted)  # repasse à False après authentification
 
     def unlock(self, password: str) -> bool:
+        if not self.doc.is_encrypted:  # déjà déverrouillé : un échec effacerait la clé
+            return True
         if self.doc.authenticate(password) > 0:
-            self._password = password
-            self.incremental = is_signed(self.doc)
+            self.doc.pdfm_password = password
+            self.incremental = is_signed(self.doc) and not self.repaired
             return True
         return False
 
@@ -270,15 +314,32 @@ class PdfDocument:
         """Le document devient `data`, enregistré dans `path` (après une signature) :
         l'historique repart de zéro, une signature ne s'annule pas."""
         with pdf_lock:
-            doc = pymupdf.open(stream=data, filetype="pdf")
-            if doc.needs_pass:
-                doc.authenticate(self._password or "")
-            self.doc = doc
+            self.doc = self._reopen(data)
             self._history.clear()
             self._pos = self._saved = 0
             self.path = Path(path).absolute()
-            self.incremental = is_signed(doc)
+            self.repaired = False
+            self.incremental = is_signed(self.doc)
         self._changed()
+
+
+def _open_repairing(data: bytes, name: str) -> tuple[pymupdf.Document, bool]:
+    """Ouvre `data` ; MuPDF répare seul la plupart des fichiers endommagés. S'il échoue,
+    qpdf (pikepdf), plus tenace sur les tables de références cassées, tente sa chance."""
+    try:
+        doc = pymupdf.open(stream=data, filetype="pdf")
+        return doc, bool(doc.is_repaired)
+    except RuntimeError as first:  # pymupdf.FileDataError hérite de RuntimeError
+        try:
+            import pikepdf
+
+            with pikepdf.open(io.BytesIO(data)) as pdf:
+                out = io.BytesIO()
+                pdf.save(out)
+            return pymupdf.open(stream=out.getvalue(), filetype="pdf"), True
+        except Exception:
+            raise PdfError(f"Impossible d'ouvrir « {name} » (fichier illisible, même "
+                           f"après tentative de réparation) :\n{first}") from first
 
 
 def is_signed(doc: pymupdf.Document) -> bool:

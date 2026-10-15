@@ -8,6 +8,8 @@ from typing import Any
 
 from PySide6.QtCore import QObject, QRunnable, Signal
 
+from pdfmanager.core.document import Cancelled  # noqa: F401 (réexporté pour l'interface)
+
 log = logging.getLogger(__name__)
 
 
@@ -51,22 +53,39 @@ class Task(QRunnable):
             self.signals.finished.emit()
 
 
-class Cancelled(Exception):
-    """L'utilisateur a abandonné une tâche lancée par run_busy."""
+class _Progress(QObject):
+    """Reçoit la progression dans le thread de l'interface (méthode de QObject)."""
+
+    def __init__(self, dialog) -> None:
+        super().__init__(dialog)
+        self.dialog = dialog
+
+    def update(self, value) -> None:
+        done, total, *label = value
+        self.dialog.setMaximum(total)
+        self.dialog.setValue(done)
+        if label and label[0]:
+            self.dialog.setLabelText(label[0])
 
 
-def run_busy(parent, label: str, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
-    """Exécute `fn(*args, **kwargs)` hors du thread de l'interface derrière un dialogue
-    d'attente ; renvoie son résultat ou relève son exception. « Annuler » lève Cancelled
-    sans attendre : la tâche se termine en arrière-plan et son résultat est ignoré."""
+def run_busy(parent, label: str, fn: Callable[..., Any], *args: Any, with_task: bool = False,
+             **kwargs: Any) -> Any:
+    """Exécute `fn` hors du thread de l'interface derrière un dialogue de progression ;
+    renvoie son résultat ou relève son exception (Cancelled si l'on annule).
+
+    - `with_task=False` : `fn(*args, **kwargs)`. « Annuler » rend la main tout de suite ;
+      la tâche finit en arrière-plan et son résultat est ignoré.
+    - `with_task=True` : `fn(task, *args, **kwargs)`, qui signale sa progression par
+      `task.emit_partial((fait, total[, libellé]))` et s'arrête d'elle-même (Cancelled) dès
+      `task.cancelled` : « Annuler » l'interrompt vraiment."""
     from PySide6.QtCore import QEventLoop, Qt, QThreadPool
     from PySide6.QtWidgets import QProgressDialog
 
     box: dict[str, Any] = {}
 
-    def work(_task: Task) -> None:
+    def work(task: Task) -> None:
         try:
-            box["result"] = fn(*args, **kwargs)
+            box["result"] = fn(task, *args, **kwargs) if with_task else fn(*args, **kwargs)
         except Exception as e:  # relevée dans le thread de l'interface
             box["error"] = e
 
@@ -76,7 +95,14 @@ def run_busy(parent, label: str, fn: Callable[..., Any], *args: Any, **kwargs: A
     progress = QProgressDialog(label, "Annuler", 0, 0, parent)
     progress.setWindowModality(Qt.WindowModality.WindowModal)
     progress.setMinimumDuration(400)  # rien ne s'affiche pour une tâche éclair
-    progress.canceled.connect(loop.quit)
+    progress.setAutoClose(False)
+    progress.setAutoReset(False)
+    if with_task:
+        receiver = _Progress(progress)
+        task.signals.partial.connect(receiver.update)
+        progress.canceled.connect(task.cancel)  # la tâche s'arrête puis rend la main
+    else:
+        progress.canceled.connect(loop.quit)
     QThreadPool.globalInstance().start(task)
     loop.exec()
     cancelled = progress.wasCanceled()

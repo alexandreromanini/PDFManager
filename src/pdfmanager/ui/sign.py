@@ -516,7 +516,7 @@ class Signer(QObject):
 
     def sign(self, tab, page: int, rect: pymupdf.Rect, field: str | None = None) -> None:
         doc = tab.doc
-        if doc.doc.needs_pass:
+        if doc.encrypted:
             QMessageBox.warning(self.window, "Signer", "Un document protégé par mot de passe "
                                 "ne peut pas être signé ici : retirez d'abord la protection.")
             return

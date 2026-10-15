@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import multiprocessing
 import sys
 import tempfile
 from logging.handlers import RotatingFileHandler
@@ -72,6 +73,44 @@ def _selftest_signature(tab, folder: Path) -> None:
         raise RuntimeError(f"signature : {status.summary}")
 
 
+class _SelftestTask:
+    cancelled = False
+
+    def emit_partial(self, value) -> None:
+        pass
+
+
+def _selftest_tools(tab, folder: Path) -> None:
+    """OCR (modèles embarqués, processus de calcul relancés par l'exe), Word (pdf2docx,
+    OpenCV) et validateur PDF/A (données de pikepdf)."""
+    import pymupdf
+
+    from pdfmanager.core import optimize, text
+    from pdfmanager.core.document import PdfDocument, PdfError
+    from pdfmanager.services import jobs
+
+    src = pymupdf.open()
+    src.new_page().insert_text((72, 100), "Reconnaissance automatique", fontsize=20)
+    scan = pymupdf.open()
+    scan.new_page().insert_image(scan[0].rect, pixmap=src[0].get_pixmap(dpi=150))
+    path = folder / "scan é.pdf"
+    path.write_bytes(scan.tobytes())
+    doc = PdfDocument(path)
+    if jobs.ocr_document(_SelftestTask(), doc, [0], "fra+eng") != 1 or "automatique" not in {
+            w[4] for w in text.page_words(doc, 0)}:
+        raise RuntimeError("OCR sans résultat")
+    jobs.to_docx(_SelftestTask(), tab.doc, folder / "export é.docx")
+    if (folder / "export é.docx").stat().st_size < 1000:
+        raise RuntimeError("export Word vide")
+    try:  # police non intégrée : refus attendu, avec la liste des écarts
+        optimize.make_pdfa(tab.doc.current_bytes())
+    except PdfError as e:
+        if "•" not in str(e):
+            raise
+    else:
+        raise RuntimeError("PDF/A accepté à tort")
+
+
 def selftest(win) -> int:
     """Vérifie l'exécutable empaqueté : chemin accentué, ouverture, rendu, recherche, copie,
     signature numérique."""
@@ -94,6 +133,7 @@ def selftest(win) -> int:
                 raise RuntimeError("recherche sans résultat")
             tab.doc.save_atomic(Path(tmp) / "copie é.pdf")
             _selftest_signature(tab, Path(tmp))
+            _selftest_tools(tab, Path(tmp))
             tab.doc.undo()  # champ de signature : rien à enregistrer à la fermeture
             win.close_tab(0)
     except Exception:
@@ -104,6 +144,9 @@ def selftest(win) -> int:
 
 
 def main() -> int:
+    # Exécutable PyInstaller : un processus de calcul (OCR, conversions) relance l'exe ;
+    # freeze_support l'oriente vers sa tâche au lieu d'ouvrir une fenêtre.
+    multiprocessing.freeze_support()
     QApplication.setApplicationName("PDFManager")
     QApplication.setApplicationVersion(__version__)
     app = QApplication(sys.argv)
