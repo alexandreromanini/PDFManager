@@ -2,6 +2,32 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [0.5.0] — 2026-10-15
+
+Phase 5 — formulaires et signatures.
+
+### Ajouté
+- Menu et barre **Formulaires** : remplir les champs d'un clic (texte, cases, boutons radio,
+  listes), en créer (champ texte, case à cocher, liste déroulante, champ de signature) en
+  traçant leur cadre, les supprimer ; champs surlignés en bleu sur la page.
+- **Signature visuelle** dessinée, tapée (police manuscrite) ou importée (fond clair rendu
+  transparent), mémorisée pour les fois suivantes, placée comme une image.
+- **Signature numérique** PAdES avec un certificat .pfx / .p12 (pyHanko) : apparence avec
+  image, nom, date, motif et lieu (aperçu), horodatage optionnel (DigiCert par défaut),
+  dans un champ existant ou un cadre tracé ; plusieurs signatures successives possibles.
+- Panneau **Signatures** : validité de chaque signature (intégrité, identité, modifications
+  ultérieures, horodatage), vérifiée à l'ouverture ; « Faire confiance au certificat » ;
+  « Afficher la version signée ».
+
+### Modifié
+- Un document signé s'enregistre par **ajout incrémental** : les octets signés restent
+  intacts et les signatures valides. Caviardage et nettoyage forcent une réécriture
+  complète (signatures invalidées, après avertissement) pour ne rien laisser de lisible.
+
+### Sécurité
+- Appliquer les caviardages retire aussi les champs de formulaire (et leurs valeurs) qui
+  chevauchent les zones.
+
 ## [0.4.0] — 2026-10-15
 
 Phase 4 — édition.

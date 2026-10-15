@@ -16,6 +16,7 @@ from PySide6.QtWidgets import QGraphicsItem, QGraphicsScene, QGraphicsView, QWid
 
 from pdfmanager.core import annotations as A
 from pdfmanager.core import editing as E
+from pdfmanager.core import forms as F
 from pdfmanager.core import text
 from pdfmanager.core.document import PdfDocument
 from pdfmanager.ui.workers import Task
@@ -28,6 +29,7 @@ CURRENT_HIT_COLOR = QColor(255, 120, 0, 150)
 SELECTION_COLOR = QColor(0, 120, 215, 90)
 ANNOT_SELECTION_COLOR = QColor(0, 120, 215)
 REDACT_DRAFT_COLOR = QColor(0, 0, 0, 90)
+FIELD_COLOR = QColor(0, 120, 215, 30)  # champs de formulaire repérables, comme dans Acrobat
 HANDLE = 10  # côté de la poignée de redimensionnement, en pixels écran
 
 # (page, échelle en pixels physiques, rotation, version du document)
@@ -55,16 +57,24 @@ class Tool(Enum):
     ADD_IMAGE = "Placer l'image"  # activé par « Insérer une image… »
     LINK = "Lien"
     REDACT = "Caviarder"
+    FIELD_TEXT = "Champ texte"
+    FIELD_CHECK = "Case à cocher"
+    FIELD_COMBO = "Liste déroulante"
+    FIELD_SIGNATURE = "Champ de signature"
+    PLACE_SIGNATURE = "Placer la signature"  # activé par « Signature visuelle… »
+    DIGITAL_SIGN = "Signer numériquement"
 
 
 COMMENT_TOOLS = (Tool.SELECT, Tool.HAND, Tool.HIGHLIGHT, Tool.UNDERLINE, Tool.STRIKEOUT,
                  Tool.NOTE, Tool.FREETEXT, Tool.RECT, Tool.ELLIPSE, Tool.LINE, Tool.ARROW,
                  Tool.INK, Tool.STAMP)
 EDIT_TOOLS = (Tool.EDIT_TEXT, Tool.ADD_TEXT, Tool.IMAGES, Tool.LINK, Tool.REDACT)
+FORM_TOOLS = (Tool.FIELD_TEXT, Tool.FIELD_CHECK, Tool.FIELD_COMBO, Tool.FIELD_SIGNATURE)
 TEXT_TOOLS = {Tool.SELECT, Tool.HIGHLIGHT, Tool.UNDERLINE, Tool.STRIKEOUT}
 CLICK_TOOLS = {Tool.NOTE, Tool.EDIT_TEXT, Tool.ADD_TEXT}
 DRAG_TOOLS = {Tool.FREETEXT, Tool.RECT, Tool.ELLIPSE, Tool.LINE, Tool.ARROW, Tool.STAMP,
-              Tool.CROP, Tool.ADD_IMAGE, Tool.LINK, Tool.REDACT}
+              Tool.CROP, Tool.ADD_IMAGE, Tool.LINK, Tool.REDACT, *FORM_TOOLS,
+              Tool.PLACE_SIGNATURE, Tool.DIGITAL_SIGN}
 
 
 class ViewMode(Enum):
@@ -158,6 +168,7 @@ class PdfView(QGraphicsView):
     annot_moved = Signal(int, int, float, float)  # (page, xref, dx, dy)
     image_edited = Signal(int, object, object)  # (page, ImageInfo, nouveau Rect)
     link_activated = Signal(object)  # LinkInfo cliqué avec l'outil Sélection
+    field_clicked = Signal(object)  # FieldInfo cliqué avec l'outil Sélection
 
     def __init__(self, doc: PdfDocument, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -183,6 +194,7 @@ class PdfView(QGraphicsView):
         self._sel_page: int | None = None
         self._sel_start: pymupdf.Point | None = None
         self._words: dict[int, list[text.Word]] = {}
+        self._fields: dict[int, list[F.FieldInfo]] = {}
 
         self.setScene(QGraphicsScene(self))
         self.items_ = [PageItem(self, i) for i in range(doc.page_count)]
@@ -345,6 +357,7 @@ class PdfView(QGraphicsView):
         """Après une modification du document : rendus à refaire, annotation à revalider.
         `structural` : pages ajoutées, retirées, réordonnées ou recadrées."""
         self._words.clear()
+        self._fields.clear()
         n = self.doc.page_count
         if structural:
             self.cache = ImageCache()  # un ancien aperçu montrerait une autre page
@@ -424,6 +437,9 @@ class PdfView(QGraphicsView):
             painter.drawImage(rect, img)
 
         m = self.doc.text_matrix(i, self.zoom, self.rotation)
+        for f in self.fields(i):
+            if not f.signed:
+                painter.fillRect(to_qrect(f.rect, m), FIELD_COLOR)
         for r in self.hits.get(i, ()):
             painter.fillRect(to_qrect(r, m), HIT_COLOR)
         if self.current_hit and self.current_hit[0] == i:
@@ -499,7 +515,7 @@ class PdfView(QGraphicsView):
         elif self.tool is Tool.REDACT:
             painter.fillRect(rect, REDACT_DRAFT_COLOR)
         else:
-            if self.tool in (Tool.FREETEXT, Tool.STAMP, Tool.CROP, Tool.ADD_IMAGE, Tool.LINK):
+            if self.tool is not Tool.RECT:  # cadres à placer : pointillés
                 pen.setStyle(Qt.PenStyle.DashLine)
                 painter.setPen(pen)
             painter.drawRect(rect)
@@ -543,6 +559,11 @@ class PdfView(QGraphicsView):
             self._words[index] = text.page_words(self.doc, index)
         return self._words[index]
 
+    def fields(self, index: int) -> list[F.FieldInfo]:
+        if index not in self._fields:
+            self._fields[index] = F.fields(self.doc, index)
+        return self._fields[index]
+
     def selected_text(self) -> str:
         return text.words_to_text(self.selection)
 
@@ -573,6 +594,10 @@ class PdfView(QGraphicsView):
                 self.viewport().update()
                 return
             self.select_annot(None)
+            field = next((f for f in reversed(self.fields(page)) if f.rect.contains(pt)), None)
+            if field:
+                self.field_clicked.emit(field)
+                return
             link = E.link_at(self.doc, page, pt)
             if link:
                 self.link_activated.emit(link)

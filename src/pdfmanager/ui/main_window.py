@@ -39,8 +39,10 @@ from pdfmanager.core import text
 from pdfmanager.core.document import PdfDocument, PdfError
 from pdfmanager.ui.annotate import Annotator
 from pdfmanager.ui.edit import Editor
+from pdfmanager.ui.forms import FormFiller
 from pdfmanager.ui.organize import PageOrganizer
 from pdfmanager.ui.sidebar import Sidebar
+from pdfmanager.ui.sign import Signer
 from pdfmanager.ui.viewer import FitMode, PdfView, PresentationView, ViewMode, to_qimage
 from pdfmanager.ui.workers import Task
 
@@ -192,6 +194,8 @@ class MainWindow(QMainWindow):
         self.annotator = Annotator(self)
         self.organizer = PageOrganizer(self)
         self.editor = Editor(self)
+        self.forms = FormFiller(self)
+        self.signer = Signer(self)  # ajoute ses boutons à la barre des formulaires
         self._build_ui()
         self.apply_theme(self.settings.value("theme", "system"))
         if geometry := self.settings.value("geometry"):
@@ -309,6 +313,8 @@ class MainWindow(QMainWindow):
 
         bar.addMenu(self.organizer.menu)
         bar.addMenu(self.editor.menu)
+        bar.addMenu(self.forms.menu)
+        bar.addMenu(self.signer.menu)
 
         m = bar.addMenu("&Commentaires")
         for tool_action in self.annotator.actions.values():
@@ -366,6 +372,8 @@ class MainWindow(QMainWindow):
         self.addToolBar(self.annotator.toolbar)
         self.addToolBarBreak()
         self.addToolBar(self.editor.toolbar)
+        self.addToolBarBreak()
+        self.addToolBar(self.forms.toolbar)
 
     # ----- accès à l'onglet courant -------------------------------------------------------
 
@@ -387,7 +395,8 @@ class MainWindow(QMainWindow):
                   self.act_close, self.act_copy, self.act_find, self.act_prev, self.act_next,
                   self.act_zoom_in, self.act_zoom_out, self.act_fit_width, self.act_fit_page,
                   self.act_rot_left, self.act_rot_right, self.act_present,
-                  self.act_delete, *self.organizer.tab_actions, *self.editor.tab_actions):
+                  self.act_delete, *self.organizer.tab_actions, *self.editor.tab_actions,
+                  *self.forms.tab_actions, *self.signer.tab_actions):
             a.setEnabled(tab is not None)
         for w in (self.page_spin, self.zoom_combo, self.search_edit, self.annotator.toolbar,
                   self.editor.text_size):
@@ -461,6 +470,8 @@ class MainWindow(QMainWindow):
         self.annotator.attach(tab)
         self.organizer.attach(tab)
         self.editor.attach(tab)
+        self.forms.attach(tab)
+        self.signer.attach(tab)
         i = self.tabs.addTab(tab, path.name)
         self.tabs.setTabToolTip(i, str(path))
         self.tabs.setCurrentIndex(i)
@@ -533,9 +544,14 @@ class MainWindow(QMainWindow):
         if not self._write(tab, Path(target)):
             return False
         tab.overwrite_confirmed = True
+        self.document_renamed(tab)
+        return True
+
+    def document_renamed(self, tab: DocumentTab) -> None:
+        """Le document a un nouveau fichier (Enregistrer sous, signature)."""
         self.tabs.setTabToolTip(self.tabs.indexOf(tab), str(tab.doc.path))
         self._add_recent(tab.doc.path)
-        return True
+        self._sync()
 
     def _write(self, tab: DocumentTab, target: Path | None) -> bool:
         try:

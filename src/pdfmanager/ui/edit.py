@@ -27,6 +27,9 @@ from pdfmanager.ui.organize import IMAGE_FILTER, _Dialog
 from pdfmanager.ui.viewer import EDIT_TOOLS, Tool
 
 LINK_PROMPT = "Lien vers :\n(adresse web, adresse e-mail ou numéro de page de ce document)"
+SIGNED_WARNING = ("\n\nCe document est signé : l'enregistrement réécrira entièrement le fichier "
+                  "et les signatures deviendront INVALIDES (sinon l'information retirée "
+                  "resterait lisible dans la version signée, conservée dans le fichier).")
 
 
 class CleanDialog(_Dialog):
@@ -227,6 +230,7 @@ class Editor(QObject):
                 "Texte, images et tracés dessous sont supprimés, ainsi que les commentaires "
                 "qui les chevauchent. Ctrl+Z reste possible tant que le document n'est pas "
                 "fermé ; une fois enregistré, rien n'est récupérable dans le fichier."
+                + (SIGNED_WARNING if tab.doc.incremental else "")
         ) != QMessageBox.StandardButton.Yes:
             return
         result = tab.apply(E.apply_redactions)
@@ -237,7 +241,10 @@ class Editor(QObject):
 
     def clean(self, tab) -> None:
         dlg = CleanDialog(self.window)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
+        if dlg.exec() == QDialog.DialogCode.Accepted and (not tab.doc.incremental or (
+                QMessageBox.question(self.window, "Nettoyer le document",
+                                     "Nettoyer quand même ?" + SIGNED_WARNING)
+                == QMessageBox.StandardButton.Yes)):
             tab.apply(E.clean, **dlg.values())
             self.window.statusBar().showMessage("Document nettoyé (effectif à "
                                                 "l'enregistrement).", 6000)

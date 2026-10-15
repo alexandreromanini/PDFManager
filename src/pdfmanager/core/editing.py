@@ -431,7 +431,10 @@ def pending_redactions(doc: PdfDocument) -> int:
 
 def apply_redactions(doc: PdfDocument) -> tuple[int, int]:
     """Retire réellement texte, images (pixels) et tracés sous les zones marquées, ainsi
-    que les commentaires qui les chevauchent. Renvoie (zones, commentaires retirés)."""
+    que les commentaires et champs de formulaire qui les chevauchent.
+    Renvoie (zones, commentaires et champs retirés). Un document signé sera réécrit en
+    entier à l'enregistrement (signatures invalidées) : un ajout incrémental laisserait
+    le contenu caviardé lisible dans la version d'origine."""
     zones = removed = 0
     with doc.edit("Appliquer les caviardages") as d:
         for p in d:
@@ -443,10 +446,16 @@ def apply_redactions(doc: PdfDocument) -> tuple[int, int]:
                         and any(a.rect.intersects(r) for r in rects)):
                     p.delete_annot(a)
                     removed += 1
+            for w in list(p.widgets()):  # la valeur d'un champ aussi
+                if any(w.rect.intersects(r) for r in rects):
+                    p.delete_widget(w)
+                    removed += 1
             p.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_PIXELS,
                                graphics=pymupdf.PDF_REDACT_LINE_ART_REMOVE_IF_COVERED,
                                text=pymupdf.PDF_REDACT_TEXT_REMOVE)
             zones += len(rects)
+    if zones:
+        doc.incremental = False  # ponytail: reste vrai même si l'on annule le caviardage
     return zones, removed
 
 
@@ -460,3 +469,4 @@ def clean(doc: PdfDocument, *, metadata: bool = True, javascript: bool = True,
                 metadata=metadata, xml_metadata=metadata, thumbnails=thumbnails,
                 hidden_text=hidden_text, remove_links=links, reset_fields=forms,
                 reset_responses=False, redactions=False, clean_pages=True)
+    doc.incremental = False  # sinon l'ancienne version (métadonnées…) resterait en tête

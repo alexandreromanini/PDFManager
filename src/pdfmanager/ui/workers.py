@@ -49,3 +49,40 @@ class Task(QRunnable):
                 self.signals.result.emit(result)
         finally:
             self.signals.finished.emit()
+
+
+class Cancelled(Exception):
+    """L'utilisateur a abandonné une tâche lancée par run_busy."""
+
+
+def run_busy(parent, label: str, fn: Callable[..., Any], *args: Any, **kwargs: Any) -> Any:
+    """Exécute `fn(*args, **kwargs)` hors du thread de l'interface derrière un dialogue
+    d'attente ; renvoie son résultat ou relève son exception. « Annuler » lève Cancelled
+    sans attendre : la tâche se termine en arrière-plan et son résultat est ignoré."""
+    from PySide6.QtCore import QEventLoop, Qt, QThreadPool
+    from PySide6.QtWidgets import QProgressDialog
+
+    box: dict[str, Any] = {}
+
+    def work(_task: Task) -> None:
+        try:
+            box["result"] = fn(*args, **kwargs)
+        except Exception as e:  # relevée dans le thread de l'interface
+            box["error"] = e
+
+    task = Task(work)
+    loop = QEventLoop()
+    task.signals.finished.connect(loop.quit)
+    progress = QProgressDialog(label, "Annuler", 0, 0, parent)
+    progress.setWindowModality(Qt.WindowModality.WindowModal)
+    progress.setMinimumDuration(400)  # rien ne s'affiche pour une tâche éclair
+    progress.canceled.connect(loop.quit)
+    QThreadPool.globalInstance().start(task)
+    loop.exec()
+    cancelled = progress.wasCanceled()
+    progress.close()
+    if cancelled and "result" not in box and "error" not in box:
+        raise Cancelled
+    if "error" in box:
+        raise box["error"]
+    return box.get("result")

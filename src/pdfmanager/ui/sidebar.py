@@ -1,4 +1,4 @@
-"""Panneau latéral : vignettes (rendues à la demande), signets, commentaires."""
+"""Panneau latéral : vignettes (rendues à la demande), signets, commentaires, signatures."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QListView,
     QMenu,
+    QStyle,
     QTabWidget,
     QTreeWidget,
     QTreeWidgetItem,
@@ -189,6 +190,9 @@ class Sidebar(QTabWidget):
         self.comments = CommentsPanel(doc)
         self.addTab(self.comments, "Commentaires")
 
+        self.signatures = SignaturesPanel()
+        self.addTab(self.signatures, "Signatures")
+
     def refresh(self, structural: bool = False) -> None:
         if structural:
             self.model.reset()
@@ -303,4 +307,67 @@ class CommentsPanel(QTreeWidget):
         menu.addAction("Couleur…", lambda: self.color_requested.emit(*target))
         menu.addSeparator()
         menu.addAction("Supprimer", lambda: self.delete_requested.emit(*target))
+        menu.exec(self.viewport().mapToGlobal(pos))
+
+
+class SignaturesPanel(QTreeWidget):
+    """État des signatures numériques (rempli par ui.sign après vérification)."""
+
+    trust_requested = Signal(object)  # SignatureStatus
+    signed_version_requested = Signal(object)  # SignatureStatus
+    verify_requested = Signal()
+
+    ICONS = {"ok": QStyle.StandardPixmap.SP_DialogApplyButton,
+             "warning": QStyle.StandardPixmap.SP_MessageBoxWarning,
+             "error": QStyle.StandardPixmap.SP_MessageBoxCritical}
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setHeaderHidden(True)
+        self.setWordWrap(True)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.customContextMenuRequested.connect(self._menu)
+        self.statuses: list = []
+        self.show_message("Aucune signature numérique")
+
+    def show_message(self, text: str) -> None:
+        self.clear()
+        self.statuses = []
+        self.addTopLevelItem(QTreeWidgetItem([text]))
+
+    def show_statuses(self, statuses: list, note: str = "") -> None:
+        if not statuses:
+            self.show_message("Aucune signature numérique")
+            return
+        self.clear()
+        self.statuses = statuses
+        for st in statuses:
+            when = f" — {st.when.astimezone():%d/%m/%Y %H:%M}" if st.when else ""
+            item = QTreeWidgetItem([f"{st.summary}\n    {st.signer}{when}"])
+            item.setIcon(0, self.style().standardIcon(self.ICONS[st.level]))
+            item.setData(0, Qt.ItemDataRole.UserRole, st)
+            item.setToolTip(0, "\n".join([st.summary, *st.details()]))
+            for line in st.details():
+                child = QTreeWidgetItem([line])
+                child.setToolTip(0, line)  # panneau étroit : texte complet au survol
+                item.addChild(child)
+            self.addTopLevelItem(item)
+        if note:
+            self.addTopLevelItem(QTreeWidgetItem([note]))
+        self.expandAll()
+
+    def _menu(self, pos) -> None:
+        item = self.itemAt(pos)
+        while item and item.parent():
+            item = item.parent()
+        st = item.data(0, Qt.ItemDataRole.UserRole) if item else None
+        menu = QMenu(self)
+        if st:
+            a = menu.addAction(f"Faire confiance au certificat de {st.signer}…",
+                               lambda: self.trust_requested.emit(st))
+            a.setEnabled(st.intact and not st.trusted)
+            menu.addAction("Afficher la version signée",
+                           lambda: self.signed_version_requested.emit(st))
+            menu.addSeparator()
+        menu.addAction("Vérifier de nouveau", self.verify_requested.emit)
         menu.exec(self.viewport().mapToGlobal(pos))

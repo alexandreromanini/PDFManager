@@ -1,6 +1,6 @@
 # PDFManager
 
-Lecteur/éditeur PDF personnel façon Acrobat Pro — Python 3.12, PySide6, PyMuPDF.
+Lecteur/éditeur PDF personnel façon Acrobat Pro — Python 3.12, PySide6, PyMuPDF, pyHanko.
 Développé sous Linux, distribué pour Windows 11 (installeur autonome, Python non requis).
 Usage strictement personnel (PyMuPDF est sous AGPL).
 
@@ -12,7 +12,7 @@ Usage strictement personnel (PyMuPDF est sous AGPL).
 | 2 | Annotations, annuler/rétablir, enregistrement | ✅ 0.2.2 |
 | 3 | Organisation des pages | ✅ 0.3.1 |
 | 4 | Édition, caviardage | ✅ 0.4.0 |
-| 5 | Formulaires, signatures | — |
+| 5 | Formulaires, signatures | ✅ 0.5.0 |
 | 6 | OCR, compression, conversions, PDF/A | — |
 
 ## Développement (Linux)
@@ -112,6 +112,38 @@ Barre **Modifier** (3ᵉ ligne) ou menu **Modifier** :
 
 L'enregistrement passe toujours par un nettoyage (ramasse-miettes) : les objets devenus
 inutiles, comme l'image d'origine sous un caviardage, ne restent pas dans le fichier.
+Exception : un document **signé** s'enregistre par ajout (voir Signer).
+
+### Formulaires
+
+Les champs apparaissent surlignés en bleu. Avec l'outil **Sélection**, un clic remplit le
+champ : saisie du texte, choix dans la liste, case cochée ou décochée. Ctrl+Z annule.
+
+Barre **Formulaires** (4ᵉ ligne) : **Champ texte**, **Case à cocher**, **Liste déroulante**
+(choix saisis un par ligne), **Champ de signature** : tracer le cadre (simple clic = taille
+par défaut), puis nommer le champ. Un simple clic sur un champ existant avec l'un de ces
+outils propose de le supprimer.
+
+### Signer
+
+- **Signature visuelle…** : dessiner (souris ou stylet), taper son nom (police manuscrite)
+  ou choisir une image — un scan sur fond blanc devient transparent. Elle est mémorisée
+  (onglet *Mémorisées* la fois suivante). Tracer ensuite son cadre sur la page. C'est une
+  image : elle n'a aucune valeur de preuve, contrairement à la signature numérique.
+- **Signer numériquement…** : tracer le cadre de la signature, ou cliquer dans un champ de
+  signature vide. Choisir le certificat `.pfx` / `.p12` et son mot de passe (jamais
+  mémorisé), le motif, le lieu, une signature visuelle mémorisée à afficher, et
+  l'horodatage (serveur DigiCert gratuit par défaut, réseau requis). Le document signé est
+  enregistré dans un **nouveau fichier** (« … - signé.pdf » proposé).
+- Panneau **Signatures** (barre latérale) : vérifié à l'ouverture d'un document signé.
+  ✅ valide ; ⚠️ valide mais identité non vérifiée (certificat auto-signé ou autorité
+  inconnue) ou document modifié depuis ; ❌ invalide. Clic droit : *Faire confiance au
+  certificat* (le vôtre, ou un certificat reçu de façon sûre), *Afficher la version
+  signée* (le fichier tel qu'il était à cette signature), *Vérifier de nouveau*.
+- Après signature, les modifications (commentaires, champs remplis, autres signatures)
+  s'enregistrent **par ajout** à la fin du fichier : les signatures restent valides.
+  Caviarder ou nettoyer un document signé le réécrit entièrement : les signatures
+  deviennent invalides (l'application prévient avant).
 
 Les plages s'écrivent `1-3, 5, 8-` (vide = toutes les pages). Tout est annulable (Ctrl+Z).
 
@@ -163,15 +195,38 @@ d'apparence (/AP) : vérifié par un moteur de rendu indépendant (Ghostscript).
 - **Chemins longs** (> 260 caractères) gérés pour la lecture/écriture ; les boîtes de dialogue
   Windows elles-mêmes peuvent les refuser si `LongPathsEnabled` n'est pas activé.
 - Ouvrir un second PDF depuis l'Explorateur lance une seconde fenêtre (pas d'instance unique).
+- **Formulaires** : les actions JavaScript (calculs, formats, validations, boutons) ne sont
+  pas exécutées. Création limitée à texte, case, liste déroulante et signature (pas de
+  boutons radio ni de zone de liste), sans réglage des propriétés (police, obligatoire…) ;
+  le texte des champs créés s'ajuste automatiquement à leur hauteur. Police des champs :
+  Helvetica, alphabet latin.
+- **Signature numérique** :
+  - certificat en fichier `.pfx` / `.p12` uniquement : pas de carte à puce ni de clé USB
+    (PKCS#11), pas de certificat du magasin Windows ;
+  - signature d'approbation visible seulement : pas de signature invisible ni de
+    certification (verrouillage du document) ; niveau PAdES B-B, ou B-T avec horodatage
+    (pas de validation à long terme LTV) ;
+  - un document **protégé par mot de passe** ne peut pas être signé (retirer la protection
+    d'abord) ; la signature vide l'historique d'annulation ;
+  - sur une page tournée, l'apparence est droite à l'écran ; le texte reste en alphabet latin.
+- **Vérification** :
+  - autorités reconnues : magasin racine de Windows + liste Mozilla (certifi) + certificats
+    approuvés dans l'application. Les listes d'Adobe (AATL) et la liste de confiance
+    européenne ne sont **pas** consultées : une signature qualifiée eIDAS peut apparaître
+    « identité non vérifiée » si sa racine n'est pas dans Windows ;
+  - **révocation non vérifiée** (aucune requête réseau : ni OCSP ni CRL) ;
+  - l'analyse des modifications ultérieures (pyHanko) est plus stricte qu'Acrobat : un
+    commentaire ajouté après signature peut être signalé « document modifié depuis » —
+    *Afficher la version signée* permet de comparer.
 
 ## Structure
 
 ```
 src/pdfmanager/
   core/      logique PDF pure, sans Qt (document + historique annuler/rétablir, texte,
-             annotations, pages, édition)
-  ui/        widgets Qt (fenêtre, vue, panneau latéral, barres Commenter / Modifier,
-             menu Pages, tâches de fond)
+             annotations, pages, édition, formulaires, signatures)
+  ui/        widgets Qt (fenêtre, vue, panneau latéral, barres Commenter / Modifier /
+             Formulaires, menus Pages / Signer, tâches de fond)
   app.py     point d'entrée, journalisation, --selftest
 packaging/   spec PyInstaller, script Inno Setup, build.ps1
 tests/       pytest + pytest-qt (PDF de test générés à la volée)
@@ -196,3 +251,14 @@ tests/       pytest + pytest-qt (PDF de test générés à la volée)
 - **Liens** : `get_links()` rend des rectangles dans le repère tourné, `insert_link()` les attend
   non tournés ; `Page.delete_link` détruit l'objet (non annulable) : on retire seulement la
   référence de `/Annots`.
+- **Sauvegarde incrémentale** (`core/document.py`, `incremental_bytes`) : PyMuPDF la refuse pour
+  un document ouvert depuis la mémoire ; on appelle directement `pdf_write_document` de MuPDF
+  (API interne de PyMuPDF, à revérifier à chaque mise à jour), en mode *snapshot* : sans lui,
+  MuPDF croit le fichier prolongé après une écriture et la suivante pointe dans le vide.
+- **Signature** : pyHanko signe un champ créé par PyMuPDF (annulable si la signature échoue) ;
+  l'apparence est une page PDF générée par PyMuPDF (`insert_htmlbox`), dessinée dans le repère
+  non tourné pour rester droite sur une page tournée. MuPDF écrit le dictionnaire de
+  chiffrement dans le trailer, ce que pyHanko refuse : d'où l'impossibilité de signer un
+  document protégé.
+- **Autorités de confiance** : `ssl` charge le magasin racine de Windows ; sous Linux il ne liste
+  pas les dossiers de certificats, d'où certifi en complément.
