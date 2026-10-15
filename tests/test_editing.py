@@ -322,3 +322,21 @@ def test_standard_unembedded_font_needs_no_warning(sample_pdf):
     doc = PdfDocument(sample_pdf)  # Helvetica non intégrée (police standard)
     assert E.edit_block(doc, block(doc, 80, 95), "Bonsoir page 1") == []
     assert "Bonsoir" in words(doc)
+
+
+@pytest.mark.parametrize("installed", [True, False])
+def test_amounts_with_euro_and_thin_spaces(tmp_path, monkeypatch, installed):
+    """Régression : modifier un montant échouait (« Ces caractères ne peuvent pas être
+    écrits… ») : les polices standard non intégrées n'écrivent ni « € » ni l'espace fine
+    insécable (U+202F) que Word et Excel mettent entre les milliers."""
+    if not installed:  # aucune police sur l'ordinateur : polices de MuPDF en Unicode
+        monkeypatch.setattr(fonts, "find", lambda name: None)
+    d = pymupdf.open()
+    d.new_page().insert_text((72, 100), "Total : 1 250,00 EUR", fontname="helv", fontsize=12)
+    d.save(tmp_path / "m.pdf")
+    doc = PdfDocument(tmp_path / "m.pdf")
+    E.edit_block(doc, block(doc, 80, 96), "Total : 1 380,00 €")
+    written = " ".join(words(doc))
+    assert "380,00" in written and "€" in written
+    pix = doc.render(0, 2)  # le « € » est réellement dessiné
+    assert sum(pix.pixel(x, y)[0] < 128 for x in range(150, 300) for y in range(180, 205)) > 30
