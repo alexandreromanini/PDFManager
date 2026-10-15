@@ -176,6 +176,9 @@ def substitute_font(line: Line) -> tuple[str, str]:
     return family + suffix, label + " gras" * bool(bold) + " italique" * bool(italic)
 
 
+_inserted = 0  # compteur des polices insérées (voir _rewrite)
+
+
 class _NotFaithful(Exception):
     """Le texte relu après insertion ne correspond pas (glyphes manquants)."""
 
@@ -205,7 +208,12 @@ def _rewrite(doc: PdfDocument, block: TextBlock, lines: list[str], fontname: str
                            graphics=pymupdf.PDF_REDACT_LINE_ART_NONE,
                            text=pymupdf.PDF_REDACT_TEXT_REMOVE)
         if buffer is not None:
-            p.insert_font(fontname=fontname, fontbuffer=buffer)
+            # Octets nuls en fin de police (ignorés à la lecture) : chaque insertion est
+            # unique. MuPDF garde sinon en cache, par empreinte, une police insérée par une
+            # opération annulée, retirée du fichier (« cannot find object in xref »).
+            global _inserted
+            _inserted += 1
+            p.insert_font(fontname=fontname, fontbuffer=buffer + b"\0" * (4 * _inserted))
         if same:  # même découpage : chaque ligne modifiée à sa place
             for k in targets:
                 line, s = block.lines[k], lines[k]
@@ -371,7 +379,10 @@ def add_image(doc: PdfDocument, page: int, rect: pymupdf.Rect, data: bytes) -> N
     """Image ajustée au rectangle (proportions conservées), droite à l'écran."""
     with doc.edit("Ajouter une image") as d:
         p = d[page]
-        p.insert_image(rect.normalize(), stream=data, keep_proportion=True, rotate=p.rotation)
+        global _inserted
+        _inserted += 1  # image unique : même raison que les polices (voir _rewrite)
+        p.insert_image(rect.normalize(), stream=data + b"\0" * (4 * _inserted),
+                       keep_proportion=True, rotate=p.rotation)
 
 
 # ----- liens ------------------------------------------------------------------------------

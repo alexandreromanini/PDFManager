@@ -2,6 +2,14 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [0.8.2] - 2026-10-15
+
+### Corrigé
+- « code=7: cannot find object in xref » en modifiant un texte (ou en insérant une image)
+  après une annulation : MuPDF et PyMuPDF réutilisaient une police ou une image insérée par
+  une opération annulée, donc retirée du fichier. Chaque insertion est désormais unique et
+  les caches sont vidés après annuler / rétablir.
+
 ## [0.8.1] - 2026-10-15
 
 ### Corrigé
