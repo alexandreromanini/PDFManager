@@ -100,6 +100,18 @@ def test_select_and_copy_one_line(sample_pdf):
     assert text.words_to_text(selected) == "Bonjour page 1"
 
 
+def test_select_flows_across_lines(sample_pdf):
+    """Du milieu de la ligne 1 au milieu de la ligne 2 : fin de 1 + début de 2, à l'envers aussi."""
+    words = text.page_words(PdfDocument(sample_pdf), 0)
+    page = next(w for w in words if w[4] == "page")
+    renard = next(w for w in words if w[4] == "renard")
+    a = pymupdf.Point(page[0] + 1, (page[1] + page[3]) / 2)
+    b = pymupdf.Point(renard[0] + 1, (renard[1] + renard[3]) / 2)
+    assert text.words_to_text(text.select_words(words, a, b)) == "page 1\nLe renard"
+    assert text.select_words(words, b, a) == text.select_words(words, a, b)
+    assert text.select_words([], a, b) == []
+
+
 def test_words_to_text_line_breaks():
     words = [(0, 0, 1, 1, "a", 0, 0, 0), (0, 0, 1, 1, "b", 0, 0, 1), (0, 2, 1, 3, "c", 0, 1, 0)]
     assert text.words_to_text(words) == "a b\nc"

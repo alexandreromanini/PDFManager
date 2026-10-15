@@ -31,11 +31,21 @@ def page_words(doc: PdfDocument, index: int) -> list[Word]:
 
 
 def select_words(words: list[Word], start: pymupdf.Point, end: pymupdf.Point) -> list[Word]:
-    """Mots sélectionnés par un glisser de `start` à `end` sur une page."""
-    # TODO(human): choisir la stratégie de sélection. Version provisoire ci-dessous =
-    # « rectangle » : tout mot touché par le rectangle start→end.
-    r = pymupdf.Rect(start, end).normalize()
-    return [w for w in words if w[0] <= r.x1 and w[2] >= r.x0 and w[1] <= r.y1 and w[3] >= r.y0]
+    """Mots sélectionnés par un glisser de `start` à `end`, en flux comme Acrobat : du mot le
+    plus proche de `start` à celui le plus proche de `end`, dans l'ordre de lecture."""
+    # ponytail: le flux suit l'ordre de get_text ; en multi-colonnes il peut enjamber une
+    # colonne. Ajouter un mode rectangle (Alt+glisser) si ça gêne.
+    if not words:
+        return []
+
+    def nearest(p: pymupdf.Point) -> int:
+        def dist(w: Word) -> tuple[float, float]:  # la ligne d'abord, puis la position
+            return (max(w[1] - p.y, 0, p.y - w[3]), max(w[0] - p.x, 0, p.x - w[2]))
+
+        return min(range(len(words)), key=lambda i: dist(words[i]))
+
+    i, j = sorted((nearest(start), nearest(end)))
+    return words[i:j + 1]
 
 
 def words_to_text(words: list[Word]) -> str:
