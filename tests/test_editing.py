@@ -340,3 +340,20 @@ def test_amounts_with_euro_and_thin_spaces(tmp_path, monkeypatch, installed):
     assert "380,00" in written and "€" in written
     pix = doc.render(0, 2)  # le « € » est réellement dessiné
     assert sum(pix.pixel(x, y)[0] < 128 for x in range(150, 300) for y in range(180, 205)) > 30
+
+
+def test_insert_again_after_undo(tmp_path, monkeypatch):
+    """Régression « code=7: cannot find object in xref » : PyMuPDF réutilisait une police
+    (ou une image) insérée par une opération annulée, donc retirée du fichier."""
+    monkeypatch.setattr(fonts, "find", lambda name: None)  # même police de secours
+    doc = font_pdf(tmp_path / "u.pdf", subset=True)
+    E.edit_block(doc, block(doc, 80, 195), "Paragraphe modifié")
+    doc.undo()
+    E.edit_block(doc, block(doc, 80, 195), "Paragraphe modifié 2")
+    data = png()
+    E.add_image(doc, 0, pymupdf.Rect(100, 300, 200, 400), data)
+    doc.undo()
+    E.add_image(doc, 0, pymupdf.Rect(100, 300, 200, 400), data)
+    doc.save(tmp_path / "sortie.pdf")
+    again = PdfDocument(tmp_path / "sortie.pdf")
+    assert "2" in words(again) and again.doc[0].get_images()

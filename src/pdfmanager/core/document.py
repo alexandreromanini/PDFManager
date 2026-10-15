@@ -121,6 +121,7 @@ class PdfDocument:
                 # annuler sans vérifier déferait l'opération PRÉCÉDENTE.
                 if self._journal_step() > before:
                     self.doc.journal_undo()
+                    self._forget_inserted()
                 self._changed()
                 raise
             self.doc.journal_stop_op()
@@ -170,6 +171,15 @@ class PdfDocument:
         self._history.append(entry)
         self._pos += 1
 
+    def _forget_inserted(self) -> None:
+        """PyMuPDF retient les polices et images déjà insérées (numéro d'objet) pour les
+        réutiliser ; annuler une opération les retire du fichier. Sans cet oubli, la
+        prochaine insertion pointerait vers un objet disparu (« cannot find object in
+        xref »)."""
+        self.doc.FontInfos.clear()
+        self.doc.InsertedImages.clear()
+        self.doc.Graftmaps.clear()
+
     def _changed(self) -> None:
         self.version += 1
         self.__dict__.pop("_pages", None)  # tailles/rotations de page à relire
@@ -198,6 +208,7 @@ class PdfDocument:
             _, old, _ = self._history[self._pos]
             if old is None:
                 self.doc.journal_undo()
+                self._forget_inserted()
             else:
                 self.doc = old
         self._changed()
@@ -209,6 +220,7 @@ class PdfDocument:
             _, _, new = self._history[self._pos]
             if new is None:
                 self.doc.journal_redo()
+                self._forget_inserted()
             else:
                 self.doc = new
             self._pos += 1
