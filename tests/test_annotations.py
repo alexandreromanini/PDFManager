@@ -129,3 +129,12 @@ def test_repeated_moves_keep_size(doc):
     for _ in range(5):
         A.move(doc, 0, xref, 3, 3, "x")
     assert A.annot_rect(doc, 0, xref).width == pytest.approx(size)
+
+
+def test_text_on_rotated_page_after_an_edit(tmp_path):
+    """Régression 0.2.0 : get_text() de PyMuPDF modifie /Rotate en douce, ce que le journal
+    refuse hors opération — recherche et sélection plantaient sur les pages tournées."""
+    doc = PdfDocument(make_pdf(tmp_path / "r.pdf", pages=1, rotate=90))
+    A.add_note(doc, 0, pymupdf.Point(50, 50), "active le journal", YELLOW, "x")
+    assert list(text.search(doc, "renard"))
+    assert [w[4] for w in text.page_words(doc, 0)][:2] == ["Bonjour", "page"]

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import weakref
 from collections.abc import Callable, Iterator
 
 import pymupdf
@@ -12,6 +13,17 @@ from pdfmanager.core.document import PdfDocument, pdf_lock
 Word = tuple[float, float, float, float, str, int, int, int]
 
 
+def textpage(page: pymupdf.Page, flags: int) -> pymupdf.TextPage:
+    """Équivalent de page.get_textpage() qui ne modifie pas la page.
+
+    PyMuPDF remet temporairement /Rotate à 0 pour extraire le texte d'une page tournée ;
+    avec le journal (annuler/rétablir) actif, toute écriture hors opération est refusée.
+    On compense la rotation par une matrice : mêmes coordonnées (page non tournée)."""
+    tp = pymupdf.TextPage(page._get_textpage(None, flags=flags, matrix=page.derotation_matrix))
+    tp.parent = weakref.proxy(page)
+    return tp
+
+
 def search(
     doc: PdfDocument, query: str, cancelled: Callable[[], bool] = lambda: False
 ) -> Iterator[tuple[int, list[pymupdf.Rect]]]:
@@ -20,14 +32,16 @@ def search(
         if cancelled():
             return
         with pdf_lock:
-            rects = doc.doc[i].search_for(query)
+            page = doc.doc[i]
+            rects = page.search_for(query, textpage=textpage(page, pymupdf.TEXTFLAGS_SEARCH))
         if rects:
             yield i, rects
 
 
 def page_words(doc: PdfDocument, index: int) -> list[Word]:
     with pdf_lock:
-        return doc.doc[index].get_text("words")
+        page = doc.doc[index]
+        return page.get_text("words", textpage=textpage(page, pymupdf.TEXTFLAGS_WORDS))
 
 
 def select_words(words: list[Word], start: pymupdf.Point, end: pymupdf.Point) -> list[Word]:

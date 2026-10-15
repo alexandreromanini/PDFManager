@@ -2,6 +2,13 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [0.2.1] — 2026-10-15
+
+### Corrigé
+- Recherche et sélection de texte en erreur sur les pages tournées après une première
+  modification (PyMuPDF modifiait la rotation de la page pendant l'extraction, ce que le
+  journal annuler/rétablir interdit).
+
 ## [0.2.0] — 2026-10-15
 
 Phase 2 — annotations et commentaires.
