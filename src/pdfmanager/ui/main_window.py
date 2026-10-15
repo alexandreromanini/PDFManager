@@ -43,6 +43,7 @@ from pdfmanager.ui.forms import FormFiller
 from pdfmanager.ui.organize import PageOrganizer
 from pdfmanager.ui.sidebar import Sidebar
 from pdfmanager.ui.sign import Signer
+from pdfmanager.ui.tools import Tools
 from pdfmanager.ui.viewer import FitMode, PdfView, PresentationView, ViewMode, to_qimage
 from pdfmanager.ui.workers import Task
 
@@ -196,6 +197,7 @@ class MainWindow(QMainWindow):
         self.editor = Editor(self)
         self.forms = FormFiller(self)
         self.signer = Signer(self)  # ajoute ses boutons à la barre des formulaires
+        self.tools = Tools(self)
         self._build_ui()
         self.apply_theme(self.settings.value("theme", "system"))
         if geometry := self.settings.value("geometry"):
@@ -270,6 +272,10 @@ class MainWindow(QMainWindow):
         m.addAction(self.act_save)
         m.addAction(self.act_save_as)
         m.addAction(self.act_save_copy)
+        m.addAction(self.tools.act_properties)
+        m.addSeparator()
+        m.addMenu(self.tools.export_menu)
+        m.addMenu(self.tools.create_menu)
         m.addSeparator()
         m.addAction(self.act_print)
         m.addSeparator()
@@ -315,6 +321,7 @@ class MainWindow(QMainWindow):
         bar.addMenu(self.editor.menu)
         bar.addMenu(self.forms.menu)
         bar.addMenu(self.signer.menu)
+        bar.addMenu(self.tools.menu)
 
         m = bar.addMenu("&Commentaires")
         for tool_action in self.annotator.actions.values():
@@ -325,6 +332,7 @@ class MainWindow(QMainWindow):
 
         m = bar.addMenu("&Aide")
         m.addAction("Ouvrir le dossier des journaux", self.open_log_dir)
+        m.addAction("Outils externes détectés…", self.tools.external_tools)
         m.addAction("À propos", lambda: QMessageBox.about(
             self, "À propos", f"PDFManager {__version__}\nUsage personnel — PySide6 + PyMuPDF"))
 
@@ -396,7 +404,8 @@ class MainWindow(QMainWindow):
                   self.act_zoom_in, self.act_zoom_out, self.act_fit_width, self.act_fit_page,
                   self.act_rot_left, self.act_rot_right, self.act_present,
                   self.act_delete, *self.organizer.tab_actions, *self.editor.tab_actions,
-                  *self.forms.tab_actions, *self.signer.tab_actions):
+                  *self.forms.tab_actions, *self.signer.tab_actions,
+                  *self.tools.tab_actions):
             a.setEnabled(tab is not None)
         for w in (self.page_spin, self.zoom_combo, self.search_edit, self.annotator.toolbar,
                   self.editor.text_size):
@@ -478,6 +487,11 @@ class MainWindow(QMainWindow):
         self._add_recent(path)
         self.settings.setValue("last_dir", str(path.parent))
         log.info("Ouvert : %s (%d pages)", path, doc.page_count)
+        if doc.repaired:
+            log.warning("Fichier endommagé, réparé en mémoire : %s", path)
+            self.statusBar().showMessage(
+                f"« {path.name} » était endommagé : réparé en mémoire. Enregistrez pour "
+                "conserver la version réparée.", 15000)
         return tab
 
     def _ask_password(self, doc: PdfDocument) -> bool:

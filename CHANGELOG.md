@@ -2,6 +2,37 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [0.6.0] — 2026-10-15
+
+Phase 6 — outils avancés.
+
+### Ajouté
+- Menu **Outils** :
+  - **Reconnaître le texte (OCR)** : Tesseract intégré (modèles français et anglais
+    embarqués), texte invisible aligné sur l'image, pages tournées comprises ; calcul
+    réparti sur plusieurs processus, progression et annulation réelles ; annulable (Ctrl+Z).
+  - **Réduire la taille** : trois niveaux (sans perte, images à 150 ou 96 dpi), option
+    de linéarisation pour le web ; copie séparée, gain affiché.
+  - **Protéger par mot de passe** (AES-256, mot de passe d'ouverture et/ou permissions)
+    et **Retirer la protection** (mot de passe des permissions demandé si besoin).
+  - **Comparer avec un autre PDF** : fenêtre côte à côte, suppressions en rouge, ajouts
+    en vert, liste des différences.
+  - **Enregistrer en PDF/A-2b** : Ghostscript (détecté) puis validation par pikepdf ; un
+    document non conforme est refusé avec la liste des écarts, jamais déclaré à tort.
+  - **Réparer un PDF endommagé** ; la réparation est aussi automatique à l'ouverture
+    (MuPDF, puis qpdf si MuPDF échoue).
+- **Fichier → Exporter** en images (PNG, JPEG), en Word (.docx, pdf2docx) et en texte ;
+  **Fichier → Créer un PDF** à partir d'images ou de documents Office (LibreOffice détecté).
+- **Propriétés du document** (Ctrl+D) : titre, auteur, sujet, mots-clés…
+- **Aide → Outils externes détectés** : état de l'OCR, de Ghostscript et de LibreOffice.
+
+### Corrigé
+- Document protégé par mot de passe : vérifier s'il était chiffré (avant de signer) ou
+  essayer un mauvais mot de passe des permissions rendait son contenu illisible en mémoire
+  (défaut de PyMuPDF 1.28, contourné et couvert par un test).
+- `python -m pdfmanager` sans garde `__main__` : les processus de calcul auraient relancé
+  l'interface.
+
 ## [0.5.0] — 2026-10-15
 
 Phase 5 — formulaires et signatures.
