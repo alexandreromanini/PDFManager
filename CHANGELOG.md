@@ -2,6 +2,25 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [0.3.0] — 2026-10-15
+
+Phase 3 — organisation des pages.
+
+### Ajouté
+- Menu **Pages** et clic droit sur les vignettes : pivoter, supprimer, extraire, insérer (page
+  vierge, PDF, images ; avant/après), recadrer en traçant la zone, annuler le recadrage.
+- Vignettes : sélection multiple, réordonnancement par glisser-déposer, dépôt de PDF ou
+  d'images pour les insérer à l'endroit visé ; Suppr supprime les pages sélectionnées.
+- En-têtes / pieds de page / numérotation (6 positions, champs {n} {total} {date} {fichier})
+  et filigrane texte (taille, opacité, orientation, couleur), corrects sur les pages tournées.
+- Fusion de PDF (un signet par fichier, modifications non enregistrées des onglets ouverts
+  incluses) et scission par plages, toutes les N pages ou par signets.
+- Annuler/rétablir couvre aussi les insertions (échange de document conservé en mémoire).
+
+### Corrigé
+- Extraction, fusion ou insertion depuis un document déjà modifié : échouaient (MuPDF écrit
+  dans la source pendant la copie).
+
 ## [0.2.2] — 2026-10-15
 
 ### Corrigé

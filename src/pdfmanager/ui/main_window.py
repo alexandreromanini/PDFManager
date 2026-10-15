@@ -38,6 +38,7 @@ from pdfmanager import __version__
 from pdfmanager.core import text
 from pdfmanager.core.document import PdfDocument, PdfError
 from pdfmanager.ui.annotate import Annotator
+from pdfmanager.ui.organize import PageOrganizer
 from pdfmanager.ui.sidebar import Sidebar
 from pdfmanager.ui.viewer import FitMode, PdfView, PresentationView, ViewMode, to_qimage
 from pdfmanager.ui.workers import Task
@@ -87,6 +88,7 @@ class DocumentTab(QSplitter):
         self.sidebar.page_requested.connect(self.view.go_to_page)
         self.view.page_changed.connect(self.sidebar.set_current)
         self.overwrite_confirmed = False  # l'utilisateur a accepté d'écraser le fichier
+        self._structure = doc.structure()
 
         self.query = ""
         self.results: list[tuple[int, pymupdf.Rect]] = []
@@ -96,10 +98,28 @@ class DocumentTab(QSplitter):
         self._search_pool = QThreadPool(self)
         self._search_pool.setMaxThreadCount(1)
 
+    def apply(self, fn, *args, **kwargs):
+        """Exécute une modification du document (fonction de core) ; en cas d'erreur, un
+        message ; dans tous les cas, l'affichage est rafraîchi. Renvoie le résultat ou None."""
+        try:
+            return fn(self.doc, *args, **kwargs)
+        except Exception as e:
+            log.exception("Échec de %s", getattr(fn, "__name__", fn))
+            QMessageBox.warning(self, "Opération impossible", str(e))
+            return None
+        finally:
+            self.changed()
+
     def changed(self) -> None:
         """Après toute modification (édition, annuler, rétablir) : tout se redessine."""
-        self.view.refresh()
-        self.sidebar.refresh()
+        structure = self.doc.structure()
+        structural = structure != self._structure
+        self._structure = structure
+        if structural and self.query:  # résultats de recherche périmés (pages ou repères)
+            self.query, self.results, self.result_index = "", [], -1
+            self.view.set_hits({})
+        self.view.refresh(structural)
+        self.sidebar.refresh(structural)
         self.modified_changed.emit()
 
     def undo(self) -> None:
@@ -169,6 +189,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.tabs)
 
         self.annotator = Annotator(self)
+        self.organizer = PageOrganizer(self)
         self._build_ui()
         self.apply_theme(self.settings.value("theme", "system"))
         if geometry := self.settings.value("geometry"):
@@ -201,8 +222,7 @@ class MainWindow(QMainWindow):
                                   T.EditUndo)
         self.act_redo = self._act("Rétablir", lambda: self._tab_do(DocumentTab.redo), K.Redo,
                                   T.EditRedo)
-        self.act_delete_annot = self._act("Supprimer le commentaire",
-                                          self.annotator.delete_selected, K.Delete, T.EditDelete)
+        self.act_delete = self._act("Supprimer", self._delete, K.Delete, T.EditDelete)
         self.act_print = self._act("&Imprimer…", self.print_document, K.Print, T.DocumentPrint)
         self.act_close = self._act("&Fermer l'onglet", lambda: self.close_tab(
             self.tabs.currentIndex()), K.Close)
@@ -285,11 +305,13 @@ class MainWindow(QMainWindow):
             self.theme_group.addAction(a)
         self.theme_group.triggered.connect(lambda a: self.apply_theme(a.data()))
 
+        bar.addMenu(self.organizer.menu)
+
         m = bar.addMenu("&Commentaires")
         for tool_action in self.annotator.actions.values():
             m.addAction(tool_action)
         m.addSeparator()
-        m.addAction(self.act_delete_annot)
+        m.addAction(self.act_delete)
         m.addAction("Nom de l'auteur…", self.annotator.ask_author)
 
         m = bar.addMenu("&Aide")
@@ -360,7 +382,7 @@ class MainWindow(QMainWindow):
                   self.act_close, self.act_copy, self.act_find, self.act_prev, self.act_next,
                   self.act_zoom_in, self.act_zoom_out, self.act_fit_width, self.act_fit_page,
                   self.act_rot_left, self.act_rot_right, self.act_present,
-                  self.act_delete_annot):
+                  self.act_delete, *self.organizer.tab_actions):
             a.setEnabled(tab is not None)
         for w in (self.page_spin, self.zoom_combo, self.search_edit, self.annotator.toolbar):
             w.setEnabled(tab is not None)
@@ -396,12 +418,16 @@ class MainWindow(QMainWindow):
         for p in paths:
             self.open_path(p)
 
-    def open_path(self, path: str | Path) -> DocumentTab | None:
+    def _tab_for(self, path: Path) -> DocumentTab | None:
+        return next((self.tabs.widget(i) for i in range(self.tabs.count())
+                     if self.tabs.widget(i).doc.path == path), None)
+
+    def load_document(self, path: str | Path) -> PdfDocument | None:
+        """Document prêt à lire : celui d'un onglet ouvert (modifications comprises), sinon
+        le fichier, mot de passe demandé si besoin. None si impossible ou abandon."""
         path = Path(path).absolute()
-        for i in range(self.tabs.count()):
-            if self.tabs.widget(i).doc.path == path:
-                self.tabs.setCurrentIndex(i)
-                return self.tabs.widget(i)
+        if tab := self._tab_for(path):
+            return tab.doc
         try:
             doc = PdfDocument(path)
         except PdfError as e:
@@ -410,6 +436,16 @@ class MainWindow(QMainWindow):
             return None
         if doc.needs_password and not self._ask_password(doc):
             return None
+        return doc
+
+    def open_path(self, path: str | Path) -> DocumentTab | None:
+        path = Path(path).absolute()
+        if tab := self._tab_for(path):
+            self.tabs.setCurrentWidget(tab)
+            return tab
+        doc = self.load_document(path)
+        if doc is None:
+            return None
         tab = DocumentTab(doc)
         tab.sidebar.setVisible(self.act_sidebar.isChecked())
         tab.status.connect(self.statusBar().showMessage)
@@ -417,6 +453,7 @@ class MainWindow(QMainWindow):
         tab.view.zoom_changed.connect(self._sync)
         tab.modified_changed.connect(self._sync)
         self.annotator.attach(tab)
+        self.organizer.attach(tab)
         i = self.tabs.addTab(tab, path.name)
         self.tabs.setTabToolTip(i, str(path))
         self.tabs.setCurrentIndex(i)
@@ -594,6 +631,14 @@ class MainWindow(QMainWindow):
         tab = self.current_tab()
         if tab and tab.view.copy_selection():
             self.statusBar().showMessage("Texte copié", 2000)
+
+    def _delete(self) -> None:
+        """Suppr : les pages si les vignettes ont le focus, sinon le commentaire sélectionné."""
+        tab = self.current_tab()
+        if tab and tab.sidebar.thumbs.hasFocus():
+            self.organizer.delete(tab)
+        else:
+            self.annotator.delete_selected()
 
     def _focus_search(self) -> None:
         self.search_edit.setFocus()

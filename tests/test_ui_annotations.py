@@ -17,7 +17,7 @@ def _discard_all(w):
     « Enregistrer ? » ouvrirait un dialogue modal qui bloquerait le test."""
     for i in range(w.tabs.count()):
         doc = w.tabs.widget(i).doc
-        doc._saved_step = doc._step()
+        doc._saved = doc._pos
 
 
 @pytest.fixture
@@ -94,7 +94,7 @@ def test_note_select_move_edit_delete(qtbot, win, sample_pdf, monkeypatch):
     tab.sidebar.comments.edit_requested.emit(0, info.xref)
     assert A.list_annots(tab.doc)[0].content == "Note modifiée"
 
-    win.act_delete_annot.trigger()
+    win.act_delete.trigger()
     assert kinds(tab) == [] and view.selected_annot is None
 
 

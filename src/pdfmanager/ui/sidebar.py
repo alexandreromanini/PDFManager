@@ -2,9 +2,24 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QAbstractListModel, QModelIndex, QSize, Qt, QThreadPool, Signal
+from PySide6.QtCore import (
+    QAbstractListModel,
+    QItemSelectionModel,
+    QModelIndex,
+    QSize,
+    Qt,
+    QThreadPool,
+    Signal,
+)
 from PySide6.QtGui import QColor, QImage, QPainter, QPixmap
-from PySide6.QtWidgets import QListView, QMenu, QTabWidget, QTreeWidget, QTreeWidgetItem
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QListView,
+    QMenu,
+    QTabWidget,
+    QTreeWidget,
+    QTreeWidgetItem,
+)
 
 from pdfmanager.core import annotations as A
 from pdfmanager.core.document import PdfDocument
@@ -33,10 +48,14 @@ class ThumbnailModel(QAbstractListModel):
         self.pixmaps: dict[int, QPixmap] = {}
         self._versions: dict[int, int] = {}  # version du document de chaque vignette
         self._pending: set[tuple[int, int]] = set()
+        self._min_version = 0  # rendus plus anciens ignorés (pages renumérotées depuis)
         self.pool = QThreadPool(self)
         self.pool.setMaxThreadCount(1)
         self._placeholder = QPixmap(THUMB)
         self._placeholder.fill(QColor("white"))
+
+    def flags(self, index: QModelIndex) -> Qt.ItemFlag:
+        return super().flags(index) | Qt.ItemFlag.ItemIsDragEnabled
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # noqa: B008
         return 0 if parent.isValid() else self.doc.page_count
@@ -60,10 +79,20 @@ class ThumbnailModel(QAbstractListModel):
         self.dataChanged.emit(self.index(0), self.index(self.rowCount() - 1),
                               [Qt.ItemDataRole.DecorationRole])
 
+    def reset(self) -> None:
+        """Pages ajoutées, retirées ou réordonnées : les index ne désignent plus les mêmes
+        pages, toutes les vignettes sont à refaire."""
+        self.beginResetModel()
+        self.pixmaps.clear()
+        self._versions.clear()
+        self._pending.clear()
+        self._min_version = self.doc.version
+        self.endResetModel()
+
     def _on_rendered(self, result: tuple[int, int, QImage]) -> None:
         i, version, img = result
         self._pending.discard((i, version))
-        if version < self._versions.get(i, -1):
+        if version < max(self._versions.get(i, -1), self._min_version) or i >= self.rowCount():
             return
         pix = QPixmap.fromImage(img)
         with QPainter(pix) as p:  # liseré : page blanche visible sur fond blanc
@@ -74,18 +103,71 @@ class ThumbnailModel(QAbstractListModel):
         self.dataChanged.emit(idx, idx, [Qt.ItemDataRole.DecorationRole])
 
 
+class ThumbList(QListView):
+    """Vignettes : sélection multiple, réordonnancement par glisser-déposer, dépôt de
+    fichiers (PDF ou images) pour les insérer à l'endroit visé."""
+
+    pages_moved = Signal(list, int)  # (pages, déposées avant cette page)
+    files_dropped = Signal(list, int)  # (chemins, position d'insertion)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setViewMode(QListView.ViewMode.IconMode)
+        self.setMovement(QListView.Movement.Static)  # le déplacement passe par le document
+        self.setResizeMode(QListView.ResizeMode.Adjust)
+        self.setUniformItemSizes(True)  # indispensable : sinon data() est appelé partout
+        self.setIconSize(THUMB)
+        self.setSpacing(6)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        self.setDragEnabled(True)
+        self.setAcceptDrops(True)
+        self.setDropIndicatorShown(True)
+        self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+
+    def selected_pages(self) -> list[int]:
+        return sorted(i.row() for i in self.selectionModel().selectedIndexes())
+
+    def drop_row(self, pos) -> int:
+        """Position d'insertion sous le curseur : avant ou après la vignette survolée."""
+        idx = self.indexAt(pos)
+        if not idx.isValid():
+            return self.model().rowCount()
+        r = self.visualRect(idx)
+        one_column = self.viewport().width() < 2 * r.width()
+        after = pos.y() > r.center().y() if one_column else pos.x() > r.center().x()
+        return idx.row() + after
+
+    def _accepts(self, event) -> bool:
+        return event.source() is self or any(u.isLocalFile() for u in event.mimeData().urls())
+
+    def dragEnterEvent(self, event) -> None:
+        if self._accepts(event):
+            event.acceptProposedAction()
+
+    def dragMoveEvent(self, event) -> None:
+        if self._accepts(event):
+            super().dragMoveEvent(event)  # défilement automatique près des bords
+            event.acceptProposedAction()
+
+    def dropEvent(self, event) -> None:
+        row = self.drop_row(event.position().toPoint())
+        if event.source() is self:
+            self.pages_moved.emit(self.selected_pages(), row)
+        else:
+            paths = [u.toLocalFile() for u in event.mimeData().urls() if u.isLocalFile()]
+            self.files_dropped.emit(paths, row)
+        # Copie : la vue source ne doit rien retirer elle-même, le document fait foi.
+        event.setDropAction(Qt.DropAction.CopyAction)
+        event.accept()
+
+
 class Sidebar(QTabWidget):
     page_requested = Signal(int)
 
     def __init__(self, doc: PdfDocument, parent=None) -> None:
         super().__init__(parent)
-        self.thumbs = QListView()
-        self.thumbs.setViewMode(QListView.ViewMode.IconMode)
-        self.thumbs.setMovement(QListView.Movement.Static)
-        self.thumbs.setResizeMode(QListView.ResizeMode.Adjust)
-        self.thumbs.setUniformItemSizes(True)  # indispensable : sinon data() est appelé partout
-        self.thumbs.setIconSize(THUMB)
-        self.thumbs.setSpacing(6)
+        self.doc = doc
+        self.thumbs = ThumbList()
         self.model = ThumbnailModel(doc, self.devicePixelRatioF(), self)
         self.thumbs.setModel(self.model)
         self.thumbs.clicked.connect(lambda idx: self.page_requested.emit(idx.row()))
@@ -100,11 +182,22 @@ class Sidebar(QTabWidget):
         self.comments = CommentsPanel(doc)
         self.addTab(self.comments, "Commentaires")
 
-    def refresh(self) -> None:
-        self.model.refresh()
+    def refresh(self, structural: bool = False) -> None:
+        if structural:
+            self.model.reset()
+            self._fill_bookmarks(self.doc.toc())  # les signets suivent les pages
+        else:
+            self.model.refresh()
         self.comments.refresh()
 
+    def select_pages(self, pages: list[int]) -> None:
+        sm = self.thumbs.selectionModel()
+        sm.clearSelection()
+        for p in pages:
+            sm.select(self.model.index(p), QItemSelectionModel.SelectionFlag.Select)
+
     def _fill_bookmarks(self, toc: list[list]) -> None:
+        self.bookmarks.clear()
         if not toc:
             item = QTreeWidgetItem(["Aucun signet"])
             item.setFlags(Qt.ItemFlag.NoItemFlags)
@@ -128,8 +221,12 @@ class Sidebar(QTabWidget):
             self.page_requested.emit(page)
 
     def set_current(self, index: int) -> None:
+        """Suit la page courante de la vue sans casser une sélection multiple qui la contient
+        (n'émet pas clicked : pas de boucle avec la vue)."""
         idx = self.model.index(index)
-        self.thumbs.setCurrentIndex(idx)  # n'émet pas clicked : pas de boucle avec la vue
+        sm = self.thumbs.selectionModel()
+        F = QItemSelectionModel.SelectionFlag
+        sm.setCurrentIndex(idx, F.NoUpdate if sm.isSelected(idx) else F.ClearAndSelect)
         self.thumbs.scrollTo(idx)
 
 

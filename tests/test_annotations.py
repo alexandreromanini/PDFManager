@@ -138,3 +138,11 @@ def test_text_on_rotated_page_after_an_edit(tmp_path):
     A.add_note(doc, 0, pymupdf.Point(50, 50), "active le journal", YELLOW, "x")
     assert list(text.search(doc, "renard"))
     assert [w[4] for w in text.page_words(doc, 0)][:2] == ["Bonjour", "page"]
+
+
+def test_write_outside_operation_still_refused(doc):
+    """Garde-fou dont dépend le contournement de JM_have_operation (core/document.py)."""
+    A.add_note(doc, 0, pymupdf.Point(50, 50), "active le journal", YELLOW, "x")
+    page = doc.doc[0]
+    with pytest.raises(Exception, match="operation"):
+        page.insert_text((50, 80), "hors opération")

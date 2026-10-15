@@ -10,7 +10,7 @@ Usage strictement personnel (PyMuPDF est sous AGPL).
 |---|---|---|
 | 1 | Lecteur, CI Windows | ✅ 0.1.0 |
 | 2 | Annotations, annuler/rétablir, enregistrement | ✅ 0.2.2 |
-| 3 | Organisation des pages | — |
+| 3 | Organisation des pages | ✅ 0.3.0 |
 | 4 | Édition, caviardage | — |
 | 5 | Formulaires, signatures | — |
 | 6 | OCR, compression, conversions, PDF/A | — |
@@ -58,7 +58,7 @@ accessible via *Aide → Ouvrir le dossier des journaux*.
 | Ajuster largeur / page | Ctrl+2 / Ctrl+0 |
 | Pivoter l'affichage | Ctrl+Maj+- / Ctrl+Maj++ |
 | Outil sélection / main | V ou Échap / H |
-| Supprimer le commentaire sélectionné | Suppr |
+| Supprimer (pages si les vignettes ont le focus, sinon le commentaire) | Suppr |
 | Panneau latéral | F4 |
 | Plein écran / présentation | F11 / F5 (Échap pour quitter) |
 
@@ -76,6 +76,21 @@ Choisir un outil dans la barre **Commenter** (2ᵉ ligne), puis :
   double-clic = modifier, clic droit = couleur / supprimer.
 - Couleur et épaisseur : boutons à droite de la barre (mémorisés par outil).
   Auteur : *Commentaires → Nom de l'auteur…* (par défaut : nom de session Windows).
+
+### Pages
+
+Menu **Pages**, ou clic droit sur les vignettes (Ctrl/Maj+clic pour en sélectionner plusieurs) :
+
+- **Réordonner** : glisser des vignettes. **Insérer** : déposer des PDF ou des images sur les
+  vignettes, ou *Insérer une page vierge / un PDF / des images* (avant/après).
+- **Pivoter**, **Supprimer**, **Extraire** (ouvre le nouveau fichier).
+- **Recadrer** : tracer la zone à garder sur la page, puis indiquer les pages concernées.
+- **En-tête, pied de page et numérotation** : 6 positions, champs `{n}`, `{total}`, `{date}`,
+  `{fichier}`. **Filigrane** : texte, taille, opacité, orientation, couleur.
+- **Fusionner des PDF** (un signet par fichier) et **Scinder** (par plages, toutes les N pages
+  ou par signets).
+
+Les plages s'écrivent `1-3, 5, 8-` (vide = toutes les pages). Tout est annulable (Ctrl+Z).
 
 `Ctrl+S` demande **une fois par document** la confirmation de remplacer le fichier d'origine
 (*Enregistrer sous…* pour écrire ailleurs). Fermer un document modifié propose
@@ -97,6 +112,15 @@ d'apparence (/AP) : vérifié par un moteur de rendu indépendant (Ghostscript).
   Acrobat les affiche s'ils existent déjà, PDFManager ne les crée pas.
 - **Dessin à main levée** : un trait par annotation.
 - L'historique annuler/rétablir est perdu à la fermeture du document.
+- **Recadrer masque, ne supprime pas** : le contenu hors de la zone reste dans le fichier
+  (lisible par extraction). Pour retirer réellement une information : caviardage (phase 4).
+- **En-têtes, numéros et filigranes** sont écrits dans le contenu des pages : une fois le
+  fichier enregistré et fermé, ils ne se modifient ni ne se retirent comme un objet.
+  Police Helvetica : alphabet latin (accents français compris), pas de cyrillique ni d'emoji.
+- **Insérer** (page vierge, PDF, images) garde en mémoire une copie complète du document par
+  insertion, pour pouvoir l'annuler (le journal de MuPDF refuse ces opérations).
+- Les fichiers **extraits, fusionnés ou scindés** ne sont pas chiffrés, même si la source
+  l'était. Fusionner des formulaires dont des champs portent le même nom peut les lier.
 - **Impression** rastérisée à 300 dpi maximum (fidèle, mais fichiers spoule plus lourds).
 - **Chemins longs** (> 260 caractères) gérés pour la lecture/écriture ; les boîtes de dialogue
   Windows elles-mêmes peuvent les refuser si `LongPathsEnabled` n'est pas activé.
@@ -106,9 +130,23 @@ d'apparence (/AP) : vérifié par un moteur de rendu indépendant (Ghostscript).
 
 ```
 src/pdfmanager/
-  core/      logique PDF pure, sans Qt (document + journal annuler/rétablir, texte, annotations)
-  ui/        widgets Qt (fenêtre, vue, panneau latéral, barre Commenter, tâches de fond)
+  core/      logique PDF pure, sans Qt (document + historique annuler/rétablir, texte,
+             annotations, pages)
+  ui/        widgets Qt (fenêtre, vue, panneau latéral, barre Commenter, menu Pages,
+             tâches de fond)
   app.py     point d'entrée, journalisation, --selftest
 packaging/   spec PyInstaller, script Inno Setup, build.ps1
 tests/       pytest + pytest-qt (PDF de test générés à la volée)
 ```
+
+## Notes techniques
+
+- **Annuler/rétablir** : pile unique mêlant étapes du journal MuPDF (léger, exact) et échanges
+  de document (copie complète) pour `insert_pdf`/`new_page`, que le journal refuse.
+- **Contournement PyMuPDF 1.28** (`core/document.py`) : `JM_have_operation()` lève une exception
+  pendant une opération du journal, ce qui bloquait `insert_text`/`insert_image`. Il est
+  neutralisé ; MuPDF continue de refuser toute écriture hors opération (test
+  `test_write_outside_operation_still_refused`). À revérifier à chaque mise à jour de PyMuPDF.
+- **Extraction de texte** sans `get_text()` direct (`core/text.py`) : sur une page tournée, PyMuPDF
+  modifie `/Rotate` pendant l'extraction, ce que le journal interdit.
+- Les tests échouent immédiatement si un dialogue modal non prévu s'ouvre (`tests/conftest.py`).
