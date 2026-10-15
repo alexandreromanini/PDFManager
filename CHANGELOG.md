@@ -2,6 +2,12 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [0.2.2] — 2026-10-15
+
+### Corrigé
+- Correctif 0.2.1 incomplet : sur une page tournée à 90° ou 270°, le texte du bas de la
+  page échappait à la recherche et à la sélection.
+
 ## [0.2.1] — 2026-10-15
 
 ### Corrigé

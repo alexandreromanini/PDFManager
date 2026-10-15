@@ -115,3 +115,27 @@ def test_select_flows_across_lines(sample_pdf):
 def test_words_to_text_line_breaks():
     words = [(0, 0, 1, 1, "a", 0, 0, 0), (0, 0, 1, 1, "b", 0, 0, 1), (0, 2, 1, 3, "c", 0, 1, 0)]
     assert text.words_to_text(words) == "a b\nc"
+
+
+@pytest.mark.parametrize("rotation", [0, 90, 180, 270])
+def test_text_extraction_matches_pymupdf_in_every_corner(tmp_path, rotation):
+    """Régression 0.2.1 : à 90°/270°, le texte du bas de la page était ignoré."""
+    d = pymupdf.open()
+    page = d.new_page(width=400, height=600)
+    for word, pt in [("HG", (10, 20)), ("HD", (370, 20)), ("BG", (10, 590)),
+                     ("BD", (370, 590)), ("C", (200, 300)), ("DEHORS", (450, 700))]:
+        page.insert_text(pt, word, fontsize=10)
+    page.set_rotation(rotation)
+    d.save(tmp_path / "coins.pdf")
+    ref_doc = pymupdf.open(tmp_path / "coins.pdf")
+    ref_page = ref_doc[0]
+    expected = sorted((w[4], tuple(round(v, 1) for v in w[:4])) for w in ref_page.get_text("words"))
+    expected_hits = [tuple(round(v, 1) for v in r) for r in ref_page.search_for("BD")]
+
+    doc = PdfDocument(tmp_path / "coins.pdf")
+    with doc.edit("active le journal (aucune modification)"):
+        pass
+    got = sorted((w[4], tuple(round(v, 1) for v in w[:4])) for w in text.page_words(doc, 0))
+    hits = [tuple(round(v, 1) for v in r) for r in dict(text.search(doc, "BD"))[0]]
+    assert got == expected and hits == expected_hits
+    assert "DEHORS" not in [w for w, _ in got]

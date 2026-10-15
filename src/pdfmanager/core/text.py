@@ -18,8 +18,12 @@ def textpage(page: pymupdf.Page, flags: int) -> pymupdf.TextPage:
 
     PyMuPDF remet temporairement /Rotate à 0 pour extraire le texte d'une page tournée ;
     avec le journal (annuler/rétablir) actif, toute écriture hors opération est refusée.
-    On compense la rotation par une matrice : mêmes coordonnées (page non tournée)."""
-    tp = pymupdf.TextPage(page._get_textpage(None, flags=flags, matrix=page.derotation_matrix))
+    On compense la rotation par une matrice : mêmes coordonnées (page non tournée).
+    La zone de découpage est donnée explicitement dans ce repère : sinon MuPDF découpe
+    avec les dimensions de la page tournée et perd le bas des pages à 90° / 270°."""
+    bound = pymupdf.Rect(0, 0, page.cropbox.width, page.cropbox.height)
+    tp = pymupdf.TextPage(page._get_textpage(bound, flags=flags & ~pymupdf.TEXT_MEDIABOX_CLIP,
+                                             matrix=page.derotation_matrix))
     tp.parent = weakref.proxy(page)
     return tp
 
