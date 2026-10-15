@@ -2,6 +2,16 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [0.6.1] — 2026-10-15
+
+Session de débogage transversale (scans tournés, document signé, protégé, réparé, chemins
+de plus de 260 caractères, annuler/rétablir mêlant toutes les sortes d'opérations) : aucun
+défaut trouvé.
+
+### Modifié
+- OCR d'un document signé : le dialogue prévient que le texte ajouté apparaîtra comme une
+  modification postérieure à la signature (qui reste valide).
+
 ## [0.6.0] — 2026-10-15
 
 Phase 6 — outils avancés.
