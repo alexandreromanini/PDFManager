@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from pdfmanager.core import annotations as A
 from pdfmanager.core.document import PdfDocument
+from pdfmanager.ui.icons import icon
 from pdfmanager.ui.viewer import to_qimage
 from pdfmanager.ui.workers import Task
 
@@ -174,24 +175,30 @@ class Sidebar(QTabWidget):
 
     def __init__(self, doc: PdfDocument, parent=None) -> None:
         super().__init__(parent)
+        self.setObjectName("Rail")  # onglets-icônes à droite (feuille de style ui.theme)
+        self.setTabPosition(QTabWidget.TabPosition.East)
+        self.setIconSize(QSize(18, 18))
         self.doc = doc
         self.thumbs = ThumbList()
         self.model = ThumbnailModel(doc, self.devicePixelRatioF(), self)
         self.thumbs.setModel(self.model)
         self.thumbs.clicked.connect(lambda idx: self.page_requested.emit(idx.row()))
-        self.addTab(self.thumbs, "Pages")
+        self._add(self.thumbs, "Pages", "files")
 
         self.bookmarks = QTreeWidget()
         self.bookmarks.setHeaderHidden(True)
         self.bookmarks.itemClicked.connect(self._on_bookmark)
         self._fill_bookmarks(doc.toc())
-        self.addTab(self.bookmarks, "Signets")
+        self._add(self.bookmarks, "Signets", "bookmark")
 
         self.comments = CommentsPanel(doc)
-        self.addTab(self.comments, "Commentaires")
+        self._add(self.comments, "Commentaires", "message-square")
 
         self.signatures = SignaturesPanel()
-        self.addTab(self.signatures, "Signatures")
+        self._add(self.signatures, "Signatures", "badge-check")
+
+    def _add(self, widget, label: str, icon_name: str) -> None:
+        self.setTabToolTip(self.addTab(widget, icon(icon_name), ""), label)
 
     def refresh(self, structural: bool = False) -> None:
         if structural:
@@ -276,7 +283,7 @@ class CommentsPanel(QTreeWidget):
             if a.page not in pages:
                 pages[a.page] = QTreeWidgetItem([f"Page {a.page + 1}"])
                 self.addTopLevelItem(pages[a.page])
-            head = " — ".join(x for x in (a.label, a.author, a.modified) if x)
+            head = " - ".join(x for x in (a.label, a.author, a.modified) if x)
             first_line = a.content.splitlines()[0] if a.content else ""
             # Contenu en retrait sur sa propre ligne, pour ne pas ressembler à un autre élément.
             item = QTreeWidgetItem([f"{head}\n    « {first_line} »" if first_line else head])
@@ -342,7 +349,7 @@ class SignaturesPanel(QTreeWidget):
         self.clear()
         self.statuses = statuses
         for st in statuses:
-            when = f" — {st.when.astimezone():%d/%m/%Y %H:%M}" if st.when else ""
+            when = f" - {st.when.astimezone():%d/%m/%Y %H:%M}" if st.when else ""
             item = QTreeWidgetItem([f"{st.summary}\n    {st.signer}{when}"])
             item.setIcon(0, self.style().standardIcon(self.ICONS[st.level]))
             item.setData(0, Qt.ItemDataRole.UserRole, st)

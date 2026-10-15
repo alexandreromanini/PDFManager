@@ -106,7 +106,7 @@ class PdfDocument:
 
     @contextmanager
     def edit(self, label: str) -> Iterator[pymupdf.Document]:
-        """`with doc.edit("Surligner") as d:` — tout ce qui est fait dans le bloc
+        """`with doc.edit("Surligner") as d:` - tout ce qui est fait dans le bloc
         s'annule d'un seul Ctrl+Z. En cas d'exception, l'opération est défaite."""
         with pdf_lock:
             if not self.doc.journal_is_enabled():

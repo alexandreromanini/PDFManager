@@ -9,7 +9,7 @@ import pymupdf
 
 from pdfmanager.core.document import PdfDocument, pdf_lock
 
-# (x0, y0, x1, y1, mot, n° bloc, n° ligne, n° mot) — format de page.get_text("words")
+# (x0, y0, x1, y1, mot, n° bloc, n° ligne, n° mot) - format de page.get_text("words")
 Word = tuple[float, float, float, float, str, int, int, int]
 
 

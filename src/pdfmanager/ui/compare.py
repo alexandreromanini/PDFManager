@@ -78,7 +78,7 @@ class ComparisonWindow(QWidget):
         w = QWidget()
         v = QVBoxLayout(w)
         v.setContentsMargins(0, 0, 0, 0)
-        v.addWidget(QLabel(f"<b>{title}</b> — {doc.path.name}"))
+        v.addWidget(QLabel(f"<b>{title}</b> - {doc.path.name}"))
         v.addWidget(view)
         return w
 

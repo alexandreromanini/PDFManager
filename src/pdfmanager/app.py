@@ -9,7 +9,7 @@ import tempfile
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from PySide6.QtCore import QStandardPaths
+from PySide6.QtCore import QLibraryInfo, QLocale, QStandardPaths, QTranslator
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from pdfmanager import __version__
@@ -111,6 +111,17 @@ def _selftest_tools(tab, folder: Path) -> None:
         raise RuntimeError("PDF/A accepté à tort")
 
 
+def _install_translations(app: QApplication) -> None:
+    """Boutons et dialogues standard de Qt en français (« Enregistrer », « Annuler »…)."""
+    path = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
+    app._translators = []  # gardés en vie
+    for name in ("qtbase", "qt"):
+        tr = QTranslator(app)
+        if tr.load(QLocale(QLocale.Language.French), name, "_", path):
+            app.installTranslator(tr)
+            app._translators.append(tr)
+
+
 def selftest(win) -> int:
     """Vérifie l'exécutable empaqueté : chemin accentué, ouverture, rendu, recherche, copie,
     signature numérique."""
@@ -122,7 +133,7 @@ def selftest(win) -> int:
         with tempfile.TemporaryDirectory() as tmp:
             doc = pymupdf.open()
             doc.new_page().insert_text((72, 72), "Bonjour autotest")
-            src = Path(tmp) / "Été — test accentué.pdf"
+            src = Path(tmp) / "Été - test accentué.pdf"
             src.write_bytes(doc.tobytes())
             tab = win.open_path(src)
             if tab is None:
@@ -132,6 +143,18 @@ def selftest(win) -> int:
             if not list(text.search(tab.doc, "autotest")):
                 raise RuntimeError("recherche sans résultat")
             tab.doc.save_atomic(Path(tmp) / "copie é.pdf")
+            from PySide6.QtCore import QSize
+
+            from pdfmanager.ui.icons import render
+
+            tr = QTranslator()
+            if not tr.load(QLocale(QLocale.Language.French), "qtbase", "_",
+                           QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)) \
+                    or tr.translate("QPlatformTheme", "Save") != "Enregistrer":
+                raise RuntimeError("traductions de Qt absentes")
+            img = render("house", "#000000", QSize(16, 16))
+            if not any(img.pixelColor(x, y).alpha() for x in range(16) for y in range(16)):
+                raise RuntimeError("icônes absentes")
             _selftest_signature(tab, Path(tmp))
             _selftest_tools(tab, Path(tmp))
             tab.doc.undo()  # champ de signature : rien à enregistrer à la fermeture
@@ -150,7 +173,8 @@ def main() -> int:
     QApplication.setApplicationName("PDFManager")
     QApplication.setApplicationVersion(__version__)
     app = QApplication(sys.argv)
-    app.setStyle("Fusion")  # suit le thème clair/sombre sur toutes les plateformes
+    app.setStyle("Fusion")  # base neutre, habillée par ui.theme
+    _install_translations(app)
     _setup_logging()
     sys.excepthook = _excepthook
     log.info("Démarrage de PDFManager %s", __version__)

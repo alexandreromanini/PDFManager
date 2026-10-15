@@ -49,6 +49,7 @@ from pdfmanager.core import forms as F
 from pdfmanager.core import pages as P
 from pdfmanager.core import signatures as S
 from pdfmanager.core.document import PdfError, pdf_lock, write_atomic
+from pdfmanager.ui.icons import icon
 from pdfmanager.ui.organize import IMAGE_FILTER, PDF_FILTER, _Dialog
 from pdfmanager.ui.viewer import Tool, to_qimage
 from pdfmanager.ui.workers import Cancelled, Task, run_busy
@@ -432,18 +433,15 @@ class Signer(QObject):
         self.pending: bytes | None = None  # signature visuelle à placer
         self.menu = QMenu("&Signer", window)
         self.tab_actions: list[QAction] = []
-        toolbar = window.forms.toolbar
-        toolbar.addSeparator()
-        for label, slot, in_toolbar in (
-                ("Signature visuelle…", self.choose_visual, True),
-                ("Signer numériquement…", self.start_digital, True),
-                ("Vérifier les signatures", self.verify, False)):
-            a = QAction(label, self)
+        for label, slot, icon_name in (
+                ("Signature visuelle…", self.choose_visual, "signature"),
+                ("Signer numériquement…", self.start_digital, "badge-check"),
+                ("Vérifier les signatures", self.verify, "scan-search")):
+            a = QAction(icon(icon_name), label, self)
             a.triggered.connect(lambda _=False, slot=slot: self._with_tab(slot))
             self.menu.addAction(a)
-            if in_toolbar:
-                toolbar.addAction(a)
             self.tab_actions.append(a)
+        self.act_visual, self.act_digital, self.act_verify = self.tab_actions
 
     def _with_tab(self, fn) -> None:
         if tab := self.window.current_tab():
@@ -589,7 +587,7 @@ class Signer(QObject):
         if statuses:
             worst = max(statuses, key=lambda st: ("ok", "warning", "error").index(st.level))
             self.window.statusBar().showMessage(
-                f"{len(statuses)} signature(s) — {worst.summary}", 10000)
+                f"{len(statuses)} signature(s) - {worst.summary}", 10000)
 
     def trust(self, tab, st: S.SignatureStatus) -> None:
         if QMessageBox.question(

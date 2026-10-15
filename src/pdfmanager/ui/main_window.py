@@ -1,4 +1,5 @@
-"""Fenêtre principale : onglets, menus, barre d'outils, fichiers récents, impression."""
+"""Fenêtre principale : documents (onglets), actions et menus, fichiers récents, impression.
+L'habillage (barre d'application, panneau d'outils, accueil) est construit par ui.shell."""
 
 from __future__ import annotations
 
@@ -10,23 +11,19 @@ from PySide6.QtCore import QRectF, QSettings, Qt, QThreadPool, QUrl, Signal
 from PySide6.QtGui import (
     QAction,
     QActionGroup,
-    QColor,
     QDesktopServices,
-    QGuiApplication,
-    QIcon,
     QKeySequence,
     QPainter,
-    QPalette,
 )
 from PySide6.QtPrintSupport import QPrintDialog, QPrinter
 from PySide6.QtWidgets import (
-    QApplication,
     QComboBox,
     QFileDialog,
     QInputDialog,
     QLabel,
     QLineEdit,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QProgressDialog,
     QSpinBox,
@@ -37,10 +34,13 @@ from PySide6.QtWidgets import (
 from pdfmanager import __version__
 from pdfmanager.core import text
 from pdfmanager.core.document import PdfDocument, PdfError
+from pdfmanager.ui import theme
 from pdfmanager.ui.annotate import Annotator
 from pdfmanager.ui.edit import Editor
 from pdfmanager.ui.forms import FormFiller
+from pdfmanager.ui.icons import icon
 from pdfmanager.ui.organize import PageOrganizer
+from pdfmanager.ui.shell import Shell
 from pdfmanager.ui.sidebar import Sidebar
 from pdfmanager.ui.sign import Signer
 from pdfmanager.ui.tools import Tools
@@ -52,22 +52,6 @@ MAX_RECENT = 10
 PDF_FILTER = "Documents PDF (*.pdf);;Tous les fichiers (*)"
 
 
-def _dark_palette() -> QPalette:
-    R = QPalette.ColorRole
-    p = QPalette()
-    for role, color in (
-        (R.Window, "#2b2b2b"), (R.WindowText, "#e6e6e6"), (R.Base, "#1f1f1f"),
-        (R.AlternateBase, "#2b2b2b"), (R.Text, "#e6e6e6"), (R.Button, "#353535"),
-        (R.ButtonText, "#e6e6e6"), (R.Highlight, "#2f7fd8"), (R.HighlightedText, "#ffffff"),
-        (R.ToolTipBase, "#353535"), (R.ToolTipText, "#e6e6e6"), (R.PlaceholderText, "#8a8a8a"),
-        (R.Light, "#4a4a4a"), (R.Mid, "#3a3a3a"), (R.Dark, "#151515"), (R.Link, "#6aa9ff"),
-    ):
-        p.setColor(role, QColor(color))
-    for role in (R.Text, R.WindowText, R.ButtonText):
-        p.setColor(QPalette.ColorGroup.Disabled, role, QColor("#777777"))
-    return p
-
-
 def _search(task: Task, doc: PdfDocument, query: str) -> str:
     for page, rects in text.search(doc, query, lambda: task.cancelled):
         task.emit_partial((query, page, rects))
@@ -75,7 +59,7 @@ def _search(task: Task, doc: PdfDocument, query: str) -> str:
 
 
 class DocumentTab(QSplitter):
-    """Un document ouvert : panneau latéral + vue + état de recherche."""
+    """Un document ouvert : vue + rail de droite (pages, signets…) + état de recherche."""
 
     status = Signal(str)
     modified_changed = Signal()
@@ -85,10 +69,10 @@ class DocumentTab(QSplitter):
         self.doc = doc
         self.sidebar = Sidebar(doc)
         self.view = PdfView(doc)
-        self.addWidget(self.sidebar)
         self.addWidget(self.view)
-        self.setStretchFactor(1, 1)
-        self.setSizes([250, 900])
+        self.addWidget(self.sidebar)
+        self.setStretchFactor(0, 1)
+        self.setSizes([900, 250])
         self.sidebar.page_requested.connect(self.view.go_to_page)
         self.view.page_changed.connect(self.sidebar.set_current)
         self.overwrite_confirmed = False  # l'utilisateur a accepté d'écraser le fichier
@@ -183,35 +167,35 @@ class MainWindow(QMainWindow):
         self.settings = QSettings()
         self._presentation: PresentationView | None = None
 
+        # Pages des documents ; leurs onglets visibles sont la bande de la barre
+        # d'application (ui.shell), tenue à jour par _sync.
         self.tabs = QTabWidget()
         self.tabs.setDocumentMode(True)
-        self.tabs.setTabsClosable(True)
-        self.tabs.setMovable(True)
-        self.tabs.tabCloseRequested.connect(self.close_tab)
+        self.tabs.tabBar().hide()
         self.tabs.currentChanged.connect(self._sync)
         self.tabs.currentChanged.connect(lambda: self.annotator.activate(self.current_tab()))
-        self.setCentralWidget(self.tabs)
 
         self.annotator = Annotator(self)
         self.organizer = PageOrganizer(self)
         self.editor = Editor(self)
         self.forms = FormFiller(self)
-        self.signer = Signer(self)  # ajoute ses boutons à la barre des formulaires
+        self.signer = Signer(self)
         self.tools = Tools(self)
         self._build_ui()
+        self.shell = Shell(self)
+        self.setCentralWidget(self.shell.root)
         self.apply_theme(self.settings.value("theme", "system"))
         if geometry := self.settings.value("geometry"):
             self.restoreGeometry(geometry)
         self._sync()
-        self.statusBar().showMessage("Ouvrez un PDF (Ctrl+O) ou glissez-le dans la fenêtre.")
 
     # ----- construction -------------------------------------------------------------------
 
-    def _act(self, label: str, slot, shortcut=None, icon: QIcon.ThemeIcon | None = None,
+    def _act(self, label: str, slot, shortcut=None, icon_name: str | None = None,
              checkable: bool = False) -> QAction:
         a = QAction(label, self)
-        if icon is not None:
-            a.setIcon(QIcon.fromTheme(icon))
+        if icon_name is not None:
+            a.setIcon(icon(icon_name))
         if shortcut is not None:
             a.setShortcut(QKeySequence(shortcut))
         a.setCheckable(checkable)
@@ -220,51 +204,54 @@ class MainWindow(QMainWindow):
         return a
 
     def _build_ui(self) -> None:
-        T, K = QIcon.ThemeIcon, QKeySequence.StandardKey
-        self.act_open = self._act("&Ouvrir…", self.open_dialog, K.Open, T.DocumentOpen)
-        self.act_save = self._act("&Enregistrer", lambda: self.save(), K.Save, T.DocumentSave)
+        K = QKeySequence.StandardKey
+        self.act_open = self._act("&Ouvrir…", self.open_dialog, K.Open, "folder-open")
+        self.act_save = self._act("&Enregistrer", lambda: self.save(), K.Save, "save")
         self.act_save_as = self._act("Enregistrer &sous…", lambda: self.save_as(), K.SaveAs,
-                                     T.DocumentSaveAs)
+                                     "save")
         self.act_save_copy = self._act("Enregistrer une &copie…", self.save_copy)
         self.act_undo = self._act("Annuler", lambda: self._tab_do(DocumentTab.undo), K.Undo,
-                                  T.EditUndo)
+                                  "undo-2")
         self.act_redo = self._act("Rétablir", lambda: self._tab_do(DocumentTab.redo), K.Redo,
-                                  T.EditRedo)
-        self.act_delete = self._act("Supprimer", self._delete, K.Delete, T.EditDelete)
-        self.act_print = self._act("&Imprimer…", self.print_document, K.Print, T.DocumentPrint)
+                                  "redo-2")
+        self.act_delete = self._act("Supprimer", self._delete, K.Delete, "trash-2")
+        self.act_print = self._act("&Imprimer…", self.print_document, K.Print, "printer")
         self.act_close = self._act("&Fermer l'onglet", lambda: self.close_tab(
             self.tabs.currentIndex()), K.Close)
-        act_quit = self._act("&Quitter", self.close, K.Quit, T.ApplicationExit)
-        self.act_copy = self._act("&Copier", self.copy_selection, K.Copy, T.EditCopy)
-        self.act_find = self._act("&Rechercher", self._focus_search, K.Find, T.EditFind)
+        act_quit = self._act("&Quitter", self.close, K.Quit, "x")
+        self.act_copy = self._act("&Copier", self.copy_selection, K.Copy, "copy")
+        self.act_find = self._act("&Rechercher", self._focus_search, K.Find, "search")
         self.act_find_next = self._act("Résultat suivant", lambda: self._tab_do(
             lambda t: t.next_result(1)), K.FindNext)
         self.act_find_prev = self._act("Résultat précédent", lambda: self._tab_do(
             lambda t: t.next_result(-1)), K.FindPrevious)
         self.act_prev = self._act("Page précédente", lambda: self._view_do(
-            PdfView.previous_page), None, T.GoPrevious)
+            PdfView.previous_page), None, "chevron-left")
         self.act_next = self._act("Page suivante", lambda: self._view_do(PdfView.next_page),
-                                  None, T.GoNext)
+                                  None, "chevron-right")
         self.act_zoom_in = self._act("Zoom avant", lambda: self._view_do(PdfView.zoom_in),
-                                     K.ZoomIn, T.ZoomIn)
+                                     K.ZoomIn, "zoom-in")
         self.act_zoom_out = self._act("Zoom arrière", lambda: self._view_do(PdfView.zoom_out),
-                                      K.ZoomOut, T.ZoomOut)
+                                      K.ZoomOut, "zoom-out")
         self.act_fit_width = self._act("Ajuster à la largeur", lambda: self._view_do(
-            lambda v: v.set_fit(FitMode.WIDTH)), "Ctrl+2")
+            lambda v: v.set_fit(FitMode.WIDTH)), "Ctrl+2", "scaling")
         self.act_fit_page = self._act("Ajuster à la page", lambda: self._view_do(
-            lambda v: v.set_fit(FitMode.PAGE)), "Ctrl+0", T.ZoomFitBest)
+            lambda v: v.set_fit(FitMode.PAGE)), "Ctrl+0", "maximize")
         self.act_rot_left = self._act("Pivoter l'affichage à gauche", lambda: self._view_do(
-            lambda v: v.rotate(-90)), "Ctrl+Shift+-", T.ObjectRotateLeft)
+            lambda v: v.rotate(-90)), "Ctrl+Shift+-", "rotate-ccw")
         self.act_rot_right = self._act("Pivoter l'affichage à droite", lambda: self._view_do(
-            lambda v: v.rotate(90)), "Ctrl+Shift++", T.ObjectRotateRight)
+            lambda v: v.rotate(90)), "Ctrl+Shift++", "rotate-cw")
         self.act_sidebar = self._act("Panneau latéral", self._toggle_sidebar, "F4",
                                      checkable=True)
         self.act_sidebar.setChecked(True)
         self.act_fullscreen = self._act("Plein écran", self.toggle_fullscreen, "F11",
-                                        T.ViewFullscreen)
-        self.act_present = self._act("Présentation", self.start_presentation, "F5")
+                                        "maximize")
+        self.act_present = self._act("Présentation", self.start_presentation, "F5",
+                                     "presentation")
 
-        bar = self.menuBar()
+        # Menus classiques, rangés dans le bouton « ⋯ » de la barre d'application ; leurs
+        # raccourcis restent actifs (actions ajoutées à la fenêtre).
+        bar = self.main_menu = QMenu(self)
         m = bar.addMenu("&Fichier")
         m.addAction(self.act_open)
         self.recent_menu = m.addMenu("Fichiers &récents")
@@ -334,54 +321,28 @@ class MainWindow(QMainWindow):
         m.addAction("Ouvrir le dossier des journaux", self.open_log_dir)
         m.addAction("Outils externes détectés…", self.tools.external_tools)
         m.addAction("À propos", lambda: QMessageBox.about(
-            self, "À propos", f"PDFManager {__version__}\nUsage personnel — PySide6 + PyMuPDF"))
+            self, "À propos", f"PDFManager {__version__}\nUsage personnel - PySide6, PyMuPDF, "
+            "pyHanko, pikepdf, pdf2docx\nIcônes : Lucide (licence ISC)"))
 
-        tb = self.addToolBar("Principale")
-        tb.setObjectName("main_toolbar")
-        tb.addAction(self.act_open)
-        tb.addAction(self.act_save)
-        tb.addAction(self.act_print)
-        tb.addAction(self.act_undo)
-        tb.addAction(self.act_redo)
-        tb.addSeparator()
-        tb.addAction(self.act_prev)
+        # Widgets de la barre du document et de la barre d'application (ui.shell).
         self.page_spin = QSpinBox()
         self.page_spin.setKeyboardTracking(False)
         self.page_spin.valueChanged.connect(lambda v: self._view_do(
             lambda view: view.current_page != v - 1 and view.go_to_page(v - 1)))
-        tb.addWidget(self.page_spin)
+        self.page_spin.setObjectName("PageSpin")
+        self.page_spin.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.page_spin.setFixedWidth(52)
         self.page_label = QLabel()
-        tb.addWidget(self.page_label)
-        tb.addAction(self.act_next)
-        tb.addSeparator()
-        tb.addAction(self.act_zoom_out)
         self.zoom_combo = QComboBox()
         self.zoom_combo.setEditable(True)
         self.zoom_combo.addItems(["50 %", "75 %", "100 %", "125 %", "150 %", "200 %", "400 %"])
         self.zoom_combo.setMinimumContentsLength(6)
         self.zoom_combo.textActivated.connect(self._zoom_from_combo)
-        tb.addWidget(self.zoom_combo)
-        tb.addAction(self.act_zoom_in)
-        tb.addAction(self.act_fit_width)
-        tb.addAction(self.act_fit_page)
-        tb.addSeparator()
-        tb.addAction(self.act_rot_left)
-        tb.addAction(self.act_rot_right)
-        tb.addSeparator()
         self.search_edit = QLineEdit()
-        self.search_edit.setPlaceholderText("Rechercher… (Entrée = suivant)")
+        self.search_edit.setPlaceholderText("Rechercher dans le document (Ctrl+F)")
         self.search_edit.setClearButtonEnabled(True)
-        self.search_edit.setMaximumWidth(260)
         self.search_edit.returnPressed.connect(
             lambda: self._tab_do(lambda t: t.search(self.search_edit.text().strip())))
-        tb.addWidget(self.search_edit)
-
-        self.addToolBarBreak()
-        self.addToolBar(self.annotator.toolbar)
-        self.addToolBarBreak()
-        self.addToolBar(self.editor.toolbar)
-        self.addToolBarBreak()
-        self.addToolBar(self.forms.toolbar)
 
     # ----- accès à l'onglet courant -------------------------------------------------------
 
@@ -407,9 +368,11 @@ class MainWindow(QMainWindow):
                   *self.forms.tab_actions, *self.signer.tab_actions,
                   *self.tools.tab_actions):
             a.setEnabled(tab is not None)
-        for w in (self.page_spin, self.zoom_combo, self.search_edit, self.annotator.toolbar,
-                  self.editor.text_size):
+        for w in (self.page_spin, self.zoom_combo, self.search_edit, self.editor.text_size,
+                  self.annotator.width_spin):
             w.setEnabled(tab is not None)
+        for a in self.annotator.actions.values():
+            a.setEnabled(tab is not None)
         for i in range(self.tabs.count()):
             t = self.tabs.widget(i)
             self.tabs.setTabText(i, t.doc.path.name + (" *" if t.doc.modified else ""))
@@ -418,13 +381,15 @@ class MainWindow(QMainWindow):
         self.act_undo.setText(f"Annuler « {undo} »" if undo else "Annuler")
         self.act_redo.setEnabled(bool(redo))
         self.act_redo.setText(f"Rétablir « {redo} »" if redo else "Rétablir")
+        if hasattr(self, "shell"):
+            self.shell.sync()
         if tab is None:
             self.setWindowTitle("PDFManager")
             self.page_label.setText(" / 0 ")
             return
         v = tab.view
         star = " *" if tab.doc.modified else ""
-        self.setWindowTitle(f"{tab.doc.path.name}{star} — PDFManager")
+        self.setWindowTitle(f"{tab.doc.path.name}{star} - PDFManager")
         self.page_spin.blockSignals(True)
         self.page_spin.setRange(1, tab.doc.page_count)
         self.page_spin.setValue(v.current_page + 1)
@@ -466,6 +431,7 @@ class MainWindow(QMainWindow):
         path = Path(path).absolute()
         if tab := self._tab_for(path):
             self.tabs.setCurrentWidget(tab)
+            self.shell.show_docs()
             return tab
         doc = self.load_document(path)
         if doc is None:
@@ -482,6 +448,7 @@ class MainWindow(QMainWindow):
         self.forms.attach(tab)
         self.signer.attach(tab)
         i = self.tabs.addTab(tab, path.name)
+        self.shell.stack.setCurrentIndex(1)  # quitte l'accueil
         self.tabs.setTabToolTip(i, str(path))
         self.tabs.setCurrentIndex(i)
         self._add_recent(path)
@@ -515,6 +482,7 @@ class MainWindow(QMainWindow):
             return False
         self.tabs.removeTab(index)
         tab.deleteLater()  # les QThreadPool enfants attendent la fin des rendus en cours
+        self._sync()
         return True
 
     def _maybe_discard(self, tab: DocumentTab) -> bool:
@@ -705,15 +673,14 @@ class MainWindow(QMainWindow):
             self._presentation.showFullScreen()
 
     def apply_theme(self, name: str) -> None:
-        scheme = {"light": Qt.ColorScheme.Light, "dark": Qt.ColorScheme.Dark}
-        # setColorScheme suffit sous Windows 11 mais pas sur tous les bureaux Linux :
-        # la palette explicite garantit le résultat ; QPalette() vide = palette du système.
-        QGuiApplication.styleHints().setColorScheme(scheme.get(name, Qt.ColorScheme.Unknown))
-        palette = {"dark": _dark_palette(), "light": QApplication.style().standardPalette()}
-        QApplication.setPalette(palette.get(name, QPalette()))
+        theme.apply(name)
         self.settings.setValue("theme", name)
         for a in self.theme_group.actions():
             a.setChecked(a.data() == name)
+        self.shell.sync()
+
+    def toggle_theme(self) -> None:
+        self.apply_theme("light" if theme.dark else "dark")
 
     def open_log_dir(self) -> None:
         from pdfmanager.app import data_dir

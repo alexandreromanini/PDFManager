@@ -26,6 +26,7 @@ from pdfmanager.core import pages as P
 from pdfmanager.core.document import Cancelled, PdfError, write_atomic
 from pdfmanager.services import external, jobs
 from pdfmanager.ui.compare import ComparisonWindow
+from pdfmanager.ui.icons import icon
 from pdfmanager.ui.organize import IMAGE_FILTER, PDF_FILTER, _Dialog, _PagesField
 from pdfmanager.ui.workers import run_busy
 
@@ -168,8 +169,9 @@ class Tools(QObject):
         self.tab_actions: list[QAction] = []
         self.windows: list[ComparisonWindow] = []  # gardées en vie
 
-        def act(menu: QMenu, label: str, slot, needs_tab: bool = True) -> QAction:
-            a = QAction(label, self)
+        def act(menu: QMenu, label: str, slot, needs_tab: bool = True,
+                icon_name: str | None = None) -> QAction:
+            a = QAction(icon(icon_name), label, self) if icon_name else QAction(label, self)
             a.triggered.connect((lambda: self._with_tab(slot)) if needs_tab else slot)
             menu.addAction(a)
             if needs_tab:
@@ -177,26 +179,37 @@ class Tools(QObject):
             return a
 
         self.menu = QMenu("Ou&tils", window)
-        act(self.menu, "Reconnaître le texte (OCR)…", self.ocr)
-        act(self.menu, "Réduire la taille du fichier…", self.compress)
+        self.act_ocr = act(self.menu, "Reconnaître le texte (OCR)…", self.ocr,
+                           icon_name="scan-text")
+        self.act_compress = act(self.menu, "Réduire la taille du fichier…", self.compress,
+                                icon_name="shrink")
         self.menu.addSeparator()
-        act(self.menu, "Protéger par mot de passe…", self.protect)
-        act(self.menu, "Retirer la protection…", self.unprotect)
+        self.act_protect = act(self.menu, "Protéger par mot de passe…", self.protect,
+                               icon_name="lock")
+        self.act_unprotect = act(self.menu, "Retirer la protection…", self.unprotect,
+                                 icon_name="lock-open")
         self.menu.addSeparator()
-        act(self.menu, "Comparer avec un autre PDF…", self.compare)
-        act(self.menu, "Enregistrer en PDF/A (archivage)…", self.pdfa)
+        self.act_compare = act(self.menu, "Comparer avec un autre PDF…", self.compare,
+                               icon_name="columns-2")
+        self.act_pdfa = act(self.menu, "Enregistrer en PDF/A (archivage)…", self.pdfa,
+                            icon_name="archive")
         self.menu.addSeparator()
-        act(self.menu, "Réparer un PDF endommagé…", self.repair, needs_tab=False)
+        self.act_repair = act(self.menu, "Réparer un PDF endommagé…", self.repair,
+                              needs_tab=False, icon_name="wrench")
 
         self.export_menu = QMenu("E&xporter", window)
-        act(self.export_menu, "En images (PNG, JPEG)…", self.export_images)
-        act(self.export_menu, "En document Word (.docx)…", self.export_word)
-        act(self.export_menu, "En texte (.txt)…", self.export_text)
+        self.act_export_images = act(self.export_menu, "En images (PNG, JPEG)…",
+                                     self.export_images, icon_name="file-image")
+        self.act_export_word = act(self.export_menu, "En document Word (.docx)…",
+                                   self.export_word, icon_name="file-text")
+        self.act_export_text = act(self.export_menu, "En texte (.txt)…", self.export_text,
+                                   icon_name="file-type-2")
         self.create_menu = QMenu("Créer un P&DF", window)
-        act(self.create_menu, "À partir d'images…", self.from_images, needs_tab=False)
-        act(self.create_menu, "À partir de documents Office…", self.from_office,
-            needs_tab=False)
-        self.act_properties = QAction("Propriétés du document…", self)
+        self.act_from_images = act(self.create_menu, "À partir d'images…", self.from_images,
+                                   needs_tab=False, icon_name="image-plus")
+        self.act_from_office = act(self.create_menu, "À partir de documents Office…",
+                                   self.from_office, needs_tab=False, icon_name="file-input")
+        self.act_properties = QAction(icon("info"), "Propriétés du document…", self)
         self.act_properties.setShortcut(QKeySequence("Ctrl+D"))
         self.act_properties.triggered.connect(lambda: self._with_tab(self.properties))
         window.addAction(self.act_properties)
@@ -321,7 +334,7 @@ class Tools(QObject):
         md = doc.doc.metadata or {}
         info = [("Fichier", str(doc.path)), ("Pages", str(doc.page_count)),
                 ("Format", md.get("format", "")),
-                ("Taille", size_text(doc.path.stat().st_size) if doc.path.exists() else "—"),
+                ("Taille", size_text(doc.path.stat().st_size) if doc.path.exists() else "-"),
                 ("Protection", md.get("encryption") or "aucune"),
                 ("Signé", "oui" if doc.incremental else "non")]
         dlg = PropertiesDialog(self.window, with_md, info)
@@ -518,8 +531,8 @@ class Tools(QObject):
         QMessageBox.information(self.window, "Outils externes", "\n\n".join([
             f"OCR (Tesseract, intégré) : modèles {', '.join(models) or 'ABSENTS'}",
             f"Ghostscript (PDF/A) : {gs}" if gs else
-            f"Ghostscript (PDF/A) : non détecté — PDF/A limité aux documents presque "
+            f"Ghostscript (PDF/A) : non détecté - PDF/A limité aux documents presque "
             f"conformes.\n{external.GS_URL}",
             f"LibreOffice (Office → PDF) : {lo}" if lo else
-            f"LibreOffice (Office → PDF) : non détecté — conversion indisponible.\n"
+            f"LibreOffice (Office → PDF) : non détecté - conversion indisponible.\n"
             f"{external.LO_URL}"]))

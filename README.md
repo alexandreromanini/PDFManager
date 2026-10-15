@@ -1,6 +1,6 @@
 # PDFManager
 
-Lecteur/éditeur PDF personnel façon Acrobat Pro — Python 3.12, PySide6, PyMuPDF, pyHanko,
+Lecteur/éditeur PDF personnel façon Acrobat Pro - Python 3.12, PySide6, PyMuPDF, pyHanko,
 pikepdf, pdf2docx.
 Développé sous Linux, distribué pour Windows 11 (installeur autonome, Python non requis).
 Usage strictement personnel (PyMuPDF est sous AGPL).
@@ -15,6 +15,7 @@ Usage strictement personnel (PyMuPDF est sous AGPL).
 | 4 | Édition, caviardage | ✅ 0.4.0 |
 | 5 | Formulaires, signatures | ✅ 0.5.0 |
 | 6 | OCR, compression, conversions, PDF/A | ✅ 0.6.1 |
+| 7 | Refonte visuelle (Windows 11, panneau d'outils, accueil) | ✅ 0.7.0 |
 
 ## Développement (Linux)
 
@@ -42,13 +43,13 @@ Résultat : `dist\PDFManager-<version>-setup.exe`. L'installation se fait par ut
 droits admin. La case « Associer les fichiers .pdf » ajoute PDFManager au menu *Ouvrir avec* ;
 Windows 11 exige ensuite de choisir « Toujours » une fois pour en faire le lecteur par défaut.
 
-**Programmes facultatifs** (détectés, non embarqués ; *Aide → Outils externes détectés*) :
+**Programmes facultatifs** (détectés, non embarqués ; *menu ⋯ → Aide → Outils externes détectés*) :
 [Ghostscript](https://ghostscript.com/releases/gsdnld.html) pour le PDF/A,
 [LibreOffice](https://fr.libreoffice.org/download/telecharger-libreoffice/) pour convertir les
 documents Office. L'OCR (Tesseract, modèles français et anglais) est intégré.
 
 Journal : `%APPDATA%\PDFManager\pdfmanager.log` (Linux : `~/.local/share/PDFManager/`),
-accessible via *Aide → Ouvrir le dossier des journaux*.
+accessible via *menu ⋯ → Aide → Ouvrir le dossier des journaux*.
 
 ## Utilisation
 
@@ -65,12 +66,28 @@ accessible via *Aide → Ouvrir le dossier des journaux*.
 | Pivoter l'affichage | Ctrl+Maj+- / Ctrl+Maj++ |
 | Outil sélection / main | V ou Échap / H |
 | Supprimer (pages si les vignettes ont le focus, sinon le commentaire) | Suppr |
-| Panneau latéral | F4 |
+| Panneau de droite (pages, signets, commentaires, signatures) | F4 |
 | Plein écran / présentation | F11 / F5 (Échap pour quitter) |
+
+### L'interface
+
+- **Accueil** : ouvrir ou déposer des PDF, outils populaires, fichiers récents. Le bouton
+  *Accueil* (en haut à gauche) y revient à tout moment ; les documents ouverts sont des
+  onglets à côté.
+- **Panneau d'outils** (à gauche) : tous les outils, regroupés (Modifier, Organiser, Signer et
+  protéger, Convertir et optimiser), avec une recherche (« proteger » trouve « Protéger »).
+  Un outil ouvre son propre panneau (flèche ← pour revenir) ou lance directement son action.
+  Sans document ouvert, il propose d'en ouvrir un.
+- **Barre du document** (au-dessus de la page) : annuler/rétablir, page, zoom, rotation,
+  impression, **Enregistrer**.
+- **Panneau de droite** : pages (vignettes), signets, commentaires, signatures (F4 le masque).
+- **Menu ⋯** (en haut à droite) : les menus classiques (Fichier, Édition, Affichage…) ;
+  tous les raccourcis clavier restent actifs. Bouton lune / soleil : thème sombre ou clair.
+- Les confirmations s'affichent en bas de la fenêtre, puis disparaissent.
 
 ### Commentaires
 
-Choisir un outil dans la barre **Commenter** (2ᵉ ligne), puis :
+Panneau d'outils → **Commenter**, choisir un outil, puis :
 
 - **Surligner / Souligner / Barrer** : glisser sur le texte.
 - **Note** : cliquer à l'endroit voulu, saisir le texte.
@@ -81,11 +98,11 @@ Choisir un outil dans la barre **Commenter** (2ᵉ ligne), puis :
 - Panneau **Commentaires** (barre latérale) : liste par page ; clic = y aller,
   double-clic = modifier, clic droit = couleur / supprimer.
 - Couleur et épaisseur : boutons à droite de la barre (mémorisés par outil).
-  Auteur : *Commentaires → Nom de l'auteur…* (par défaut : nom de session Windows).
+  Auteur : panneau **Commenter** → *Nom de l'auteur…* (par défaut : nom de session Windows).
 
 ### Pages
 
-Menu **Pages**, ou clic droit sur les vignettes (Ctrl/Maj+clic pour en sélectionner plusieurs) :
+Panneau d'outils → **Organiser les pages** (ou menu ⋯ → Pages), ou clic droit sur les vignettes (Ctrl/Maj+clic pour en sélectionner plusieurs) :
 
 - **Réordonner** : glisser des vignettes. **Insérer** : déposer des PDF ou des images sur les
   vignettes, ou *Insérer une page vierge / un PDF / des images* (avant/après).
@@ -98,7 +115,7 @@ Menu **Pages**, ou clic droit sur les vignettes (Ctrl/Maj+clic pour en sélectio
 
 ### Modifier
 
-Barre **Modifier** (3ᵉ ligne) ou menu **Modifier** :
+Panneau d'outils → **Modifier le texte et les images** (et **Caviarder**) :
 
 - **Modifier le texte** : cliquer un paragraphe, corriger le texte dans la fenêtre. Même
   position, taille et couleur ; police d'origine si possible (voir limites).
@@ -122,7 +139,9 @@ Exception : un document **signé** s'enregistre par ajout (voir Signer).
 
 ### Outils, export, création
 
-- **Outils → Reconnaître le texte (OCR)** : rend recherchable et sélectionnable le texte des
+Depuis le panneau d'outils (groupe *Convertir et optimiser*) ou le menu ⋯ → Outils :
+
+- **Reconnaître le texte (OCR)** : rend recherchable et sélectionnable le texte des
   pages scannées (texte invisible posé sur l'image ; l'aspect ne change pas). Par défaut,
   seules les pages sans texte sont analysées. Plusieurs pages en parallèle ; Annuler arrête
   tout de suite ; Ctrl+Z retire le texte ajouté.
@@ -138,17 +157,17 @@ Exception : un document **signé** s'enregistre par ajout (voir Signer).
 - **Réparer un PDF endommagé** : ouvre et reconstruit le fichier ; « Enregistrer sous… »
   pour garder la version réparée. Tout fichier endommagé est d'ailleurs réparé à l'ouverture
   (message dans la barre d'état).
-- **Fichier → Exporter** : images (une par page), Word (.docx), texte (.txt, UTF-8).
-  **Fichier → Créer un PDF** : à partir d'images (une page A4 par image) ou de documents
+- **Convertir** (ou menu ⋯ → Fichier → Exporter / Créer un PDF) : exporter en images
+  (une par page), Word (.docx), texte (.txt, UTF-8) ; créer un PDF à partir d'images (une page A4 par image) ou de documents
   Office (PDF écrit à côté de chaque document, puis ouvert).
-- **Fichier → Propriétés du document** (Ctrl+D) : titre, auteur, sujet, mots-clés.
+- **Propriétés du document** (Ctrl+D, ou panneau **Protéger**) : titre, auteur, sujet, mots-clés.
 
 ### Formulaires
 
 Les champs apparaissent surlignés en bleu. Avec l'outil **Sélection**, un clic remplit le
 champ : saisie du texte, choix dans la liste, case cochée ou décochée. Ctrl+Z annule.
 
-Barre **Formulaires** (4ᵉ ligne) : **Champ texte**, **Case à cocher**, **Liste déroulante**
+Panneau d'outils → **Formulaires** : **Champ texte**, **Case à cocher**, **Liste déroulante**
 (choix saisis un par ligne), **Champ de signature** : tracer le cadre (simple clic = taille
 par défaut), puis nommer le champ. Un simple clic sur un champ existant avec l'un de ces
 outils propose de le supprimer.
@@ -156,7 +175,7 @@ outils propose de le supprimer.
 ### Signer
 
 - **Signature visuelle…** : dessiner (souris ou stylet), taper son nom (police manuscrite)
-  ou choisir une image — un scan sur fond blanc devient transparent. Elle est mémorisée
+  ou choisir une image - un scan sur fond blanc devient transparent. Elle est mémorisée
   (onglet *Mémorisées* la fois suivante). Tracer ensuite son cadre sur la page. C'est une
   image : elle n'a aucune valeur de preuve, contrairement à la signature numérique.
 - **Signer numériquement…** : tracer le cadre de la signature, ou cliquer dans un champ de
@@ -231,7 +250,7 @@ d'apparence (/AP) : vérifié par un moteur de rendu indépendant (Ghostscript).
 - **Réduction de taille** : gain surtout sur les images ; un PDF de texte pur réduit peu.
   Un document signé perd ses signatures dans la copie réduite.
 - **Protection** : les restrictions (impression, copie…) ne sont respectées que par les
-  logiciels qui le veulent bien — seul le mot de passe d'ouverture protège vraiment.
+  logiciels qui le veulent bien - seul le mot de passe d'ouverture protège vraiment.
 - **PDF/A** : niveau 2b uniquement (pas 1b, 3b, ni accessibilité « a »). Sans Ghostscript,
   seuls les documents déjà presque conformes passent. Ghostscript retire les commentaires non
   imprimables ; le validateur intégré (pikepdf) refuse tout ce qu'il ne sait pas garantir,
@@ -267,7 +286,7 @@ d'apparence (/AP) : vérifié par un moteur de rendu indépendant (Ghostscript).
     « identité non vérifiée » si sa racine n'est pas dans Windows ;
   - **révocation non vérifiée** (aucune requête réseau : ni OCSP ni CRL) ;
   - l'analyse des modifications ultérieures (pyHanko) est plus stricte qu'Acrobat : un
-    commentaire ajouté après signature peut être signalé « document modifié depuis » —
+    commentaire ajouté après signature peut être signalé « document modifié depuis » -
     *Afficher la version signée* permet de comparer.
 
 ## Structure
@@ -279,9 +298,10 @@ src/pdfmanager/
              optimisation, conversions, comparaison)
   services/  processus de calcul (OCR, compression, Word), programmes externes
              (Ghostscript, LibreOffice), tâches longues complètes
-  resources/ modèles Tesseract fra + eng (tessdata_fast 4.1.0, Apache-2.0)
-  ui/        widgets Qt (fenêtre, vue, panneau latéral, barres Commenter / Modifier /
-             Formulaires, menus Pages / Signer, tâches de fond)
+  resources/ modèles Tesseract fra + eng (tessdata_fast 4.1.0, Apache-2.0),
+             icônes Lucide 0.460.0 (ISC, voir icons/LICENSE.txt)
+  ui/        widgets Qt : coque (shell : barre d'application, panneau d'outils, accueil),
+             thème et icônes, vue, panneau de droite, contrôleurs des outils, tâches de fond
   app.py     point d'entrée, journalisation, --selftest
 packaging/   spec PyInstaller, script Inno Setup, build.ps1
 tests/       pytest + pytest-qt (PDF de test générés à la volée)
