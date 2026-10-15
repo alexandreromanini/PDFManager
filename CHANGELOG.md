@@ -2,6 +2,27 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [0.8.0] - 2026-10-15
+
+### Modifié
+- **Nouveau logo** (page blanche et signature sur carré rouge arrondi) : fenêtre, barre
+  d'application, exécutable, installeur, fichiers PDF associés.
+- **Modifier le texte** se fait directement sur la page : un cadre s'ouvre sur le
+  paragraphe, dans sa police ; clic à côté (ou Ctrl+Entrée) pour valider, Échap pour
+  annuler. Seules les lignes changées sont réécrites (les autres gardent police et
+  justification). Quand le PDF n'intègre la police qu'en partie, la même police installée
+  sur l'ordinateur est utilisée (réduite aux caractères utilisés) avant tout remplacement.
+  Les avertissements s'affichent en notification.
+- **Ajouter du texte** : on trace une bulle qui s'étire, on écrit dedans. Le texte reste
+  ensuite déplaçable (glisser), redimensionnable (poignée), modifiable (clic) et annulable.
+  C'est un texte « machine à écrire », comme dans *Remplir et signer* d'Acrobat ; il
+  n'apparaît pas dans la liste des commentaires.
+- **Texte libre** (commentaire) : saisi et modifié sur la page de la même façon.
+
+### Corrigé
+- Pendant une saisie, les raccourcis de la fenêtre (Échap, V, H, Suppr) ne l'interrompent
+  plus.
+
 ## [0.7.0] - 2026-10-15
 
 Phase 7 - refonte visuelle, d'après la maquette validée (Windows 11 épuré, accent rouge).

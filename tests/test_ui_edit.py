@@ -5,6 +5,7 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QDialog, QFileDialog, QInputDialog, QMessageBox
 from test_ui_annotations import _discard_all, drag, vp_pos
 
+from pdfmanager.core import annotations as A
 from pdfmanager.core import editing as E
 from pdfmanager.core import text
 from pdfmanager.core.document import PdfDocument
@@ -31,16 +32,22 @@ def click(qtbot, view, pt, page=0):
     qtbot.mouseClick(view.viewport(), Qt.MouseButton.LeftButton, pos=vp_pos(view, page, pt))
 
 
-def test_edit_existing_text(qtbot, win, sample_pdf, monkeypatch):
-    shown = []
-    monkeypatch.setattr(QInputDialog, "getMultiLineText",
-                        lambda *a, **k: (a[3].replace("Bonjour", "Bonsoir"), True))
-    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: shown.append(a[2]))
+def test_edit_existing_text_in_place(qtbot, win, sample_pdf):
     tab = win.open_path(sample_pdf)
     win.annotator.set_tool(Tool.EDIT_TEXT)
     click(qtbot, tab.view, pymupdf.Point(80, 95))
+    editor = tab.view.inline  # saisie sur la page, pas de fenêtre
+    assert editor is not None and "Bonjour page 1" in editor.toPlainText()
+    editor.setPlainText(editor.toPlainText().replace("Bonjour", "Bonsoir"))
+    qtbot.keyClick(editor, Qt.Key.Key_Return, Qt.KeyboardModifier.ControlModifier)
+    assert tab.view.inline is None
     assert "Bonsoir" in words(tab.doc) and "Bonjour" not in words(tab.doc)
-    assert shown == []  # Helvetica standard remplacée par elle-même : rien à signaler
+    assert win.act_undo.text() == "Annuler « Modifier le texte »"
+
+    click(qtbot, tab.view, pymupdf.Point(80, 125))  # Échap : rien ne change
+    tab.view.inline.setPlainText("perdu")
+    qtbot.keyClick(tab.view.inline, Qt.Key.Key_Escape)
+    assert tab.view.inline is None and "perdu" not in words(tab.doc)
     assert win.act_undo.text() == "Annuler « Modifier le texte »"
 
 
@@ -51,13 +58,40 @@ def test_click_without_text_explains(qtbot, win, sample_pdf):
     assert "Aucun texte" in win.statusBar().currentMessage() and not tab.doc.modified
 
 
-def test_add_text(qtbot, win, sample_pdf, monkeypatch):
-    monkeypatch.setattr(QInputDialog, "getMultiLineText", lambda *a, **k: ("Ajout libre", True))
+def typed(tab):
+    return [a for a in A.list_annots(tab.doc) if a.kind == "Typewriter"]
+
+
+def test_add_text_bubble_move_edit_resize(qtbot, win, sample_pdf):
     tab = win.open_path(sample_pdf)
+    view = tab.view
     win.annotator.set_tool(Tool.ADD_TEXT)
-    click(qtbot, tab.view, pymupdf.Point(100, 400))
-    w = next(w for w in text.page_words(tab.doc, 0) if w[4] == "libre")
-    assert 400 < w[3] < 420  # sous le point cliqué (coin haut gauche du texte)
+    drag(qtbot, view, pymupdf.Point(100, 400), pymupdf.Point(300, 440))  # bulle étirée
+    assert view.inline is not None and view.inline.toPlainText() == ""
+    qtbot.keyClicks(view.inline, "Ajout libre")
+    click(qtbot, view, pymupdf.Point(400, 700))  # clic à côté : validé
+    [info] = typed(tab)
+    assert info.content == "Ajout libre" and info.rect.x0 == pytest.approx(100, abs=2)
+    assert info.rect.width == pytest.approx(200, abs=3)
+    assert view.selected_annot[1] == info.xref
+    assert tab.sidebar.comments.topLevelItem(0).text(0) == "Aucun commentaire"
+
+    drag(qtbot, view, pymupdf.Point(150, 410), pymupdf.Point(200, 470))  # déplacé
+    moved = typed(tab)[0].rect
+    assert moved.x0 == pytest.approx(150, abs=2) and moved.y0 == pytest.approx(460, abs=2)
+
+    click(qtbot, view, pymupdf.Point(170, 470))  # simple clic : modifier sur place
+    assert view.inline.toPlainText() == "Ajout libre"
+    view.inline.setPlainText("Texte corrigé")
+    qtbot.keyClick(view.inline, Qt.Key.Key_Return, Qt.KeyboardModifier.ControlModifier)
+    assert typed(tab)[0].content == "Texte corrigé"
+
+    corner = pymupdf.Point(moved.x1 + 2, moved.y1 + 2)  # poignée : redimensionner
+    drag(qtbot, view, corner, corner + (80, 30))
+    assert typed(tab)[0].rect.width == pytest.approx(moved.width + 80, abs=4)
+    for _ in range(4):
+        win.act_undo.trigger()
+    assert typed(tab) == []
 
 
 def test_image_insert_move_resize_delete(qtbot, win, sample_pdf, tmp_path, monkeypatch):

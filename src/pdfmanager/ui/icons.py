@@ -75,6 +75,24 @@ class _Engine(QIconEngine):
         return _Engine(self.name, self.role)
 
 
+LOGO = ICON_DIR.parent / "logo" / "pdfmanager.svg"
+
+
+def logo() -> QIcon:
+    """Logo de l'application (fenêtre, barre des tâches), net à toutes les tailles."""
+    result = QIcon()
+    renderer = QSvgRenderer(str(LOGO))
+    for size in (16, 24, 32, 48, 64, 128, 256):
+        img = QImage(size, size, QImage.Format.Format_ARGB32_Premultiplied)
+        img.fill(Qt.GlobalColor.transparent)
+        p = QPainter(img)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        renderer.render(p, QRectF(0, 0, size, size))
+        p.end()
+        result.addPixmap(QPixmap.fromImage(img))
+    return result
+
+
 def icon(name: str, role: str = "icon") -> QIcon:
     """role : clé de couleur du thème ('icon', 'accent', 'accent_text', 'text2'…)."""
     return QIcon(_Engine(name, role))

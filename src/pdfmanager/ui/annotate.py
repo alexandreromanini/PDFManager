@@ -155,6 +155,8 @@ class Annotator(QObject):
         v.annot_moved.connect(
             lambda page, xref, dx, dy: tab.apply(A.move, page, xref, dx, dy, self.author))
         v.annot_edit_requested.connect(lambda page, xref: self.edit_content(tab, page, xref))
+        v.annot_resized.connect(
+            lambda page, xref, rect: tab.apply(A.resize, page, xref, rect, self.author))
         v.annot_selected.connect(c.select)
         c.activated.connect(lambda page, xref: v.select_annot((page, xref), reveal=True))
         c.edit_requested.connect(lambda page, xref: self.edit_content(tab, page, xref))
@@ -181,9 +183,12 @@ class Annotator(QObject):
             if tool is Tool.FREETEXT:
                 if rect.width < 10 or rect.height < 10:  # simple clic : taille par défaut
                     rect = pymupdf.Rect(start, start + (200, 40))
-                txt, ok = QInputDialog.getMultiLineText(self.window, "Texte libre", "Texte :")
-                if ok and txt.strip():
-                    tab.apply(A.add_freetext, page, rect, txt, rgb, author)
+                from pdfmanager.ui.edit import text_font
+
+                tab.view.edit_inline(
+                    page, rect, "", text_font(12, tab.view.zoom), self.color(tool), wrap=True,
+                    opaque=False, on_commit=lambda txt, r: txt.strip() and tab.apply(
+                        A.add_freetext, page, r, txt, rgb, author))
             elif tool is Tool.STAMP:
                 if rect.width < 10 or rect.height < 10:
                     rect = pymupdf.Rect(start, start + (150, 50))
@@ -197,10 +202,30 @@ class Annotator(QObject):
                     None)
         if info is None:
             return
+        if info.kind in A.RESIZABLE:  # texte affiché sur la page : modifié sur place
+            self._edit_on_page(tab, info)
+            return
         txt, ok = QInputDialog.getMultiLineText(self.window, info.label, "Commentaire :",
                                                 info.content)
         if ok and txt != info.content:
             tab.apply(A.set_content, page, xref, txt, self.author)
+
+    def _edit_on_page(self, tab, info: A.AnnotInfo) -> None:
+        from pdfmanager.ui.edit import text_font
+
+        text, size, rgb = A.text_box(tab.doc, info.page, info.xref)
+
+        def commit(new: str, rect: pymupdf.Rect) -> None:
+            if not new.strip() and info.kind == "Typewriter":  # vidé : retiré
+                tab.apply(A.delete, info.page, info.xref)
+                return
+            grown = rect.height > info.rect.height + 1 or rect.width > info.rect.width + 1
+            if new != text or grown:
+                tab.apply(A.update_text_box, info.page, info.xref, new,
+                          rect if grown else None, self.author)
+
+        tab.view.edit_inline(info.page, info.rect, text, text_font(size, tab.view.zoom),
+                             QColor.fromRgbF(*rgb), wrap=True, opaque=True, on_commit=commit)
 
     def change_color(self, tab, page: int, xref: int) -> None:
         c = QColorDialog.getColor(parent=self.window, title="Couleur du commentaire")

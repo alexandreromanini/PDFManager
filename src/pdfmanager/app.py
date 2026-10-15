@@ -175,6 +175,9 @@ def main() -> int:
     app = QApplication(sys.argv)
     app.setStyle("Fusion")  # base neutre, habillée par ui.theme
     _install_translations(app)
+    from pdfmanager.ui.icons import logo
+
+    app.setWindowIcon(logo())
     _setup_logging()
     sys.excepthook = _excepthook
     log.info("Démarrage de PDFManager %s", __version__)

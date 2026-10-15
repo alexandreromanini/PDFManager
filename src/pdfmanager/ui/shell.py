@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from pdfmanager.ui import theme
-from pdfmanager.ui.icons import icon
+from pdfmanager.ui.icons import icon, logo
 from pdfmanager.ui.viewer import COMMENT_TOOLS, Tool
 
 SWATCHES = ("#FFD60A", "#7BD389", "#64B5F6", "#F48FB1", "#E53935", "#1B1B1B")
@@ -288,8 +288,13 @@ class Shell(QObject):
         bar.setObjectName("AppBar")
         bar.setFixedHeight(52)
         lay = QHBoxLayout(bar)
-        lay.setContentsMargins(10, 0, 12, 0)
+        lay.setContentsMargins(14, 0, 12, 0)
         lay.setSpacing(6)
+        mark = QLabel()
+        mark.setPixmap(logo().pixmap(QSize(24, 24)))
+        mark.setToolTip("PDFManager")
+        lay.addWidget(mark)
+        lay.addSpacing(4)
         self.home_button = QToolButton()
         self.home_button.setObjectName("HomeButton")
         self.home_button.setText("Accueil")
@@ -507,9 +512,13 @@ class Shell(QObject):
         p.section("Texte ajouté")
         p.field("Taille", w.editor.text_size)
         p.rows([w.annotator.color_action])
-        p.hint("Modifier le texte : cliquez un paragraphe et corrigez-le. Si la police "
-               "d'origine n'a pas les caractères voulus, une police standard proche la "
-               "remplace, et vous êtes prévenu.")
+        p.hint("Modifier le texte : cliquez un paragraphe et corrigez-le directement sur la "
+               "page, puis cliquez à côté (Échap pour annuler). Seules les lignes changées "
+               "sont réécrites, dans la police d'origine ou la même police installée sur "
+               "l'ordinateur ; sinon une police proche, et vous êtes prévenu.")
+        p.hint("Ajouter du texte : tracez une bulle et écrivez dedans. Ensuite, glissez-la "
+               "pour la déplacer, tirez sa poignée pour l'élargir, cliquez dessus pour la "
+               "modifier.")
         return p.finish()
 
     def _page_comment(self) -> QWidget:

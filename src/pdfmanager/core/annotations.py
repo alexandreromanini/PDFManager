@@ -7,6 +7,7 @@ d'apparence (/AP) généré par MuPDF : Acrobat et les autres lecteurs les affic
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 import pymupdf
@@ -20,10 +21,14 @@ LABELS = {
     "Highlight": "Surlignage", "Underline": "Soulignement", "StrikeOut": "Texte barré",
     "Text": "Note", "FreeText": "Texte libre", "Square": "Rectangle", "Circle": "Ellipse",
     "Line": "Ligne", "Ink": "Dessin", "Stamp": "Tampon",
-    "Redact": "Caviardage à appliquer",
+    "Redact": "Caviardage à appliquer", "Typewriter": "Texte ajouté",
 }
 MARKUP = {"Highlight": "Surligner", "Underline": "Souligner", "StrikeOut": "Barrer"}
-MOVABLE = {"Text", "FreeText", "Square", "Circle", "Stamp"}  # définis par un simple rectangle
+MOVABLE = {"Text", "FreeText", "Square", "Circle", "Stamp", "Typewriter"}  # un rectangle
+RESIZABLE = {"FreeText", "Typewriter"}  # le texte se recompose dans le nouveau cadre
+# « Ajouter du texte » : texte libre sans cadre marqué « machine à écrire » (/IT), comme le
+# texte de « Remplir et signer » d'Acrobat : déplaçable et modifiable, hors des commentaires.
+TYPEWRITER_IT = "/FreeTextTypeWriter"
 
 # Tampons standard PDF. MuPDF dessine leur apparence avec le libellé anglais (« APPROVED »).
 STAMPS = [
@@ -150,12 +155,19 @@ def add_stamp(doc: PdfDocument, page: int, rect: pymupdf.Rect, stamp: int, autho
         return annot.xref
 
 
+def kind_of(doc: PdfDocument, annot: pymupdf.Annot) -> str:
+    kind = annot.type[1]
+    if kind == "FreeText" and doc.doc.xref_get_key(annot.xref, "IT")[1] == TYPEWRITER_IT:
+        return "Typewriter"
+    return kind
+
+
 def list_annots(doc: PdfDocument) -> list[AnnotInfo]:
     out = []
     with pdf_lock:
         for i, page in enumerate(doc.doc):
             for a in page.annots():
-                kind = a.type[1]
+                kind = kind_of(doc, a)
                 if kind == "Popup":
                     continue
                 info = a.info
@@ -168,7 +180,7 @@ def find_at(doc: PdfDocument, page: int, point: pymupdf.Point,
             tolerance: float = 3) -> tuple[int, str, pymupdf.Rect] | None:
     """Annotation sous `point` (la plus au-dessus) : (xref, type, rectangle)."""
     with pdf_lock:
-        hits = [(a.xref, a.type[1], a.rect) for a in doc.doc[page].annots()
+        hits = [(a.xref, kind_of(doc, a), a.rect) for a in doc.doc[page].annots()
                 if a.type[1] != "Popup"
                 and (a.rect + (-tolerance, -tolerance, tolerance, tolerance)).contains(point)]
     return hits[-1] if hits else None
@@ -216,7 +228,7 @@ def move(doc: PdfDocument, page: int, xref: int, dx: float, dy: float, author: s
     with doc.edit("Déplacer le commentaire") as d:
         p = d[page]
         annot = _load(p, xref)
-        if annot.type[1] not in MOVABLE:
+        if kind_of(doc, annot) not in MOVABLE:
             raise ValueError(f"Un(e) {LABELS.get(annot.type[1], annot.type[1])} ne se déplace pas")
         target = annot.rect + (dx, dy, dx, dy)
         annot.set_rect(target)
@@ -232,3 +244,52 @@ def delete(doc: PdfDocument, page: int, xref: int) -> None:
     with doc.edit("Supprimer le commentaire") as d:
         p = d[page]
         p.delete_annot(_load(p, xref))
+
+
+def add_typewriter(doc: PdfDocument, page: int, rect: pymupdf.Rect, text: str, color: Color,
+                   fontsize: float, author: str) -> int:
+    """Texte ajouté dans le cadre `rect` (retour à la ligne automatique), droit à l'écran."""
+    with doc.edit("Ajouter du texte") as d:
+        p = d[page]
+        annot = p.add_freetext_annot(rect.normalize(), text, fontsize=fontsize,
+                                     fontname="helv", text_color=color, border_width=0,
+                                     rotate=p.rotation)
+        d.xref_set_key(annot.xref, "IT", TYPEWRITER_IT)
+        _stamp_info(annot, author, created=True)
+        return annot.xref
+
+
+def text_box(doc: PdfDocument, page: int, xref: int) -> tuple[str, float, Color]:
+    """Texte, taille et couleur d'un texte libre (pour l'éditer sur place)."""
+    with pdf_lock:
+        p = doc.doc[page]
+        annot = _load(p, xref)
+        da = doc.doc.xref_get_key(xref, "DA")[1]
+        size = re.search(r"([\d.]+)\s+Tf", da)
+        rgb = re.search(r"([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+rg", da)
+        return (annot.info["content"], float(size.group(1)) if size else 12.0,
+                tuple(float(v) for v in rgb.groups()) if rgb else (0.0, 0.0, 0.0))
+
+
+def update_text_box(doc: PdfDocument, page: int, xref: int, text: str,
+                    rect: pymupdf.Rect | None, author: str) -> None:
+    """Nouveau texte et, si donné, nouveau cadre (agrandi pendant la saisie)."""
+    with doc.edit("Modifier le texte ajouté") as d:
+        p = d[page]
+        annot = _load(p, xref)
+        annot.set_info(content=text)
+        if rect is not None:
+            annot.set_rect(rect.normalize())
+        _stamp_info(annot, author)
+        annot.update()
+
+
+def resize(doc: PdfDocument, page: int, xref: int, rect: pymupdf.Rect, author: str) -> None:
+    with doc.edit("Redimensionner le texte") as d:
+        p = d[page]
+        annot = _load(p, xref)
+        if kind_of(doc, annot) not in RESIZABLE:
+            raise ValueError("Seuls les textes se redimensionnent.")
+        annot.set_rect(rect.normalize())
+        _stamp_info(annot, author)
+        annot.update()

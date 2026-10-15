@@ -10,15 +10,32 @@ from collections import OrderedDict
 from enum import Enum
 
 import pymupdf
-from PySide6.QtCore import QPointF, QRectF, QSizeF, Qt, QThreadPool, Signal
-from PySide6.QtGui import QColor, QGuiApplication, QImage, QPainter, QPalette, QPen, QPolygonF
-from PySide6.QtWidgets import QGraphicsItem, QGraphicsScene, QGraphicsView, QWidget
+from PySide6.QtCore import QEvent, QPointF, QRectF, QSizeF, Qt, QThreadPool, QTimer, Signal
+from PySide6.QtGui import (
+    QColor,
+    QFont,
+    QGuiApplication,
+    QImage,
+    QPainter,
+    QPalette,
+    QPen,
+    QPolygonF,
+)
+from PySide6.QtWidgets import (
+    QFrame,
+    QGraphicsItem,
+    QGraphicsScene,
+    QGraphicsView,
+    QPlainTextEdit,
+    QWidget,
+)
 
 from pdfmanager.core import annotations as A
 from pdfmanager.core import editing as E
 from pdfmanager.core import forms as F
 from pdfmanager.core import text
 from pdfmanager.core.document import PdfDocument
+from pdfmanager.ui import theme
 from pdfmanager.ui.workers import Task
 
 SPACING = 12
@@ -71,8 +88,9 @@ COMMENT_TOOLS = (Tool.SELECT, Tool.HAND, Tool.HIGHLIGHT, Tool.UNDERLINE, Tool.ST
 EDIT_TOOLS = (Tool.EDIT_TEXT, Tool.ADD_TEXT, Tool.IMAGES, Tool.LINK, Tool.REDACT)
 FORM_TOOLS = (Tool.FIELD_TEXT, Tool.FIELD_CHECK, Tool.FIELD_COMBO, Tool.FIELD_SIGNATURE)
 TEXT_TOOLS = {Tool.SELECT, Tool.HIGHLIGHT, Tool.UNDERLINE, Tool.STRIKEOUT}
-CLICK_TOOLS = {Tool.NOTE, Tool.EDIT_TEXT, Tool.ADD_TEXT}
-DRAG_TOOLS = {Tool.FREETEXT, Tool.RECT, Tool.ELLIPSE, Tool.LINE, Tool.ARROW, Tool.STAMP,
+CLICK_TOOLS = {Tool.NOTE, Tool.EDIT_TEXT}
+DRAG_TOOLS = {Tool.ADD_TEXT, Tool.FREETEXT, Tool.RECT, Tool.ELLIPSE, Tool.LINE, Tool.ARROW,
+              Tool.STAMP,
               Tool.CROP, Tool.ADD_IMAGE, Tool.LINK, Tool.REDACT, *FORM_TOOLS,
               Tool.PLACE_SIGNATURE, Tool.DIGITAL_SIGN}
 
@@ -166,6 +184,7 @@ class PdfView(QGraphicsView):
     annot_selected = Signal(object)  # (page, xref) ou None
     annot_edit_requested = Signal(int, int)  # double-clic : (page, xref)
     annot_moved = Signal(int, int, float, float)  # (page, xref, dx, dy)
+    annot_resized = Signal(int, int, object)  # (page, xref, nouveau Rect) : textes
     image_edited = Signal(int, object, object)  # (page, ImageInfo, nouveau Rect)
     link_activated = Signal(object)  # LinkInfo cliqué avec l'outil Sélection
     field_clicked = Signal(object)  # FieldInfo cliqué avec l'outil Sélection
@@ -195,6 +214,7 @@ class PdfView(QGraphicsView):
         self._sel_page: int | None = None
         self._sel_start: pymupdf.Point | None = None
         self._words: dict[int, list[text.Word]] = {}
+        self.inline: InlineEditor | None = None  # saisie en cours sur la page
         self._fields: dict[int, list[F.FieldInfo]] = {}
 
         self.setScene(QGraphicsScene(self))
@@ -280,6 +300,8 @@ class PdfView(QGraphicsView):
 
     def _on_scroll(self) -> None:
         self._drop_queued()
+        if self.inline is not None:
+            self.inline.place()
         if self.mode is ViewMode.SINGLE:
             return
         visible = self.mapToScene(self.viewport().rect()).boundingRect()
@@ -318,6 +340,7 @@ class PdfView(QGraphicsView):
         self.go_to_page(self.current_page - self.step())
 
     def set_zoom(self, zoom: float) -> None:
+        self.finish_inline()
         self.fit = FitMode.NONE
         self.zoom = min(max(zoom, ZOOM_MIN), ZOOM_MAX)
         self._relayout()
@@ -329,15 +352,18 @@ class PdfView(QGraphicsView):
         self.set_zoom(next((z for z in reversed(ZOOM_STEPS) if z < self.zoom - 1e-3), ZOOM_MIN))
 
     def set_fit(self, fit: FitMode) -> None:
+        self.finish_inline()
         self.fit = fit
         self._relayout()
 
     def set_mode(self, mode: ViewMode) -> None:
+        self.finish_inline()
         self.mode = mode
         self._relayout(keep_position=False)
         self.go_to_page(self.current_page)
 
     def rotate(self, delta: int) -> None:
+        self.finish_inline()
         self.rotation = (self.rotation + delta) % 360
         self._relayout()
 
@@ -349,7 +375,8 @@ class PdfView(QGraphicsView):
         if not hand:
             C = Qt.CursorShape
             self.viewport().setCursor(C.IBeamCursor if tool in TEXT_TOOLS else C.CrossCursor)
-        if tool is not Tool.SELECT:
+        self.finish_inline()
+        if tool not in (Tool.SELECT, Tool.ADD_TEXT):  # textes ajoutés : déplaçables aussi
             self.select_annot(None)
         if tool is not Tool.IMAGES:
             self.selected_image = None
@@ -400,6 +427,20 @@ class PdfView(QGraphicsView):
         self.annot_selected.emit(self.selected_annot[:2] if self.selected_annot else None)
         self.viewport().update()
 
+    # ----- saisie sur la page ---------------------------------------------------------------
+
+    def edit_inline(self, page: int, rect: pymupdf.Rect, text: str, font: QFont,
+                    color: QColor, *, wrap: bool, opaque: bool, on_commit) -> InlineEditor:
+        """Ouvre une zone de saisie sur la page, posée sur `rect` (repère du texte).
+        `on_commit(texte, cadre)` reçoit le texte et le cadre final (agrandi au besoin)."""
+        self.finish_inline()
+        self.inline = InlineEditor(self, page, rect, text, font, color, wrap, opaque, on_commit)
+        return self.inline
+
+    def finish_inline(self) -> None:
+        if self.inline is not None:
+            self.inline.commit()
+
     # ----- rendu --------------------------------------------------------------------------
 
     def _key(self, index: int, scale: float) -> RenderKey:
@@ -449,12 +490,14 @@ class PdfView(QGraphicsView):
             for w in self.selection:
                 painter.fillRect(to_qrect(pymupdf.Rect(w[:4]), m), SELECTION_COLOR)
         if self.selected_annot and self.selected_annot[0] == i:
-            r = self.selected_annot[2]
-            if self._drag and self._drag["kind"] == "move":
-                d = self._drag["end"] - self._drag["start"]
-                r = r + (d.x, d.y, d.x, d.y)
+            r = self._annot_preview()
             painter.setPen(QPen(ANNOT_SELECTION_COLOR, 1.5, Qt.PenStyle.DashLine))
-            painter.drawRect(to_qrect(r, m).adjusted(-2, -2, 2, 2))
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            q = to_qrect(r, m).adjusted(-2, -2, 2, 2)
+            painter.drawRect(q)
+            if self.selected_annot[3] in A.RESIZABLE:
+                painter.fillRect(QRectF(q.right() - HANDLE / 2, q.bottom() - HANDLE / 2,
+                                        HANDLE, HANDLE), ANNOT_SELECTION_COLOR)
         if self.selected_image and self.selected_image[0] == i:
             r = to_qrect(self._image_preview(), m)
             painter.setPen(QPen(ANNOT_SELECTION_COLOR, 1.5, Qt.PenStyle.DashLine))
@@ -463,8 +506,19 @@ class PdfView(QGraphicsView):
             painter.fillRect(QRectF(r.right() - HANDLE / 2, r.bottom() - HANDLE / 2,
                                     HANDLE, HANDLE), ANNOT_SELECTION_COLOR)
         if (self._drag and self._drag["page"] == i
-                and self._drag["kind"] not in ("move", "img_move", "img_resize")):
+                and self._drag["kind"] not in ("move", "img_move", "img_resize", "annot_resize")):
             self._paint_draft(painter, m)
+
+    def _annot_preview(self) -> pymupdf.Rect:
+        """Cadre de l'annotation sélectionnée, déplacement ou redimensionnement compris."""
+        r, drag = self.selected_annot[2], self._drag
+        if drag and drag["kind"] == "move":
+            d = drag["end"] - drag["start"]
+            return r + (d.x, d.y, d.x, d.y)
+        if drag and drag["kind"] == "annot_resize":
+            rect = pymupdf.Rect(drag["anchor"], drag["end"]).normalize()
+            return rect if rect.width >= 20 and rect.height >= 10 else r
+        return r
 
     def _image_preview(self) -> pymupdf.Rect:
         """Rectangle de l'image sélectionnée, déplacement ou redimensionnement en cours
@@ -484,9 +538,12 @@ class PdfView(QGraphicsView):
         return pymupdf.Rect(a, corner).normalize()
 
     def _on_handle(self, page: int, img: E.ImageInfo, pos) -> pymupdf.Point | None:
+        return self._handle_anchor(page, img.rect, pos)
+
+    def _handle_anchor(self, page: int, rect: pymupdf.Rect, pos) -> pymupdf.Point | None:
         """Si `pos` est sur la poignée (coin bas droit à l'écran) : coin opposé (ancre)."""
         m = self.doc.text_matrix(page, self.zoom, self.rotation)
-        r = to_qrect(img.rect, m)
+        r = to_qrect(rect, m)
         local = self.items_[page].mapFromScene(self.mapToScene(pos))
         if abs(local.x() - r.right()) <= HANDLE and abs(local.y() - r.bottom()) <= HANDLE:
             return pymupdf.Point(r.left(), r.top()) * ~m  # repère du texte
@@ -515,6 +572,13 @@ class PdfView(QGraphicsView):
             painter.drawEllipse(rect)
         elif self.tool is Tool.REDACT:
             painter.fillRect(rect, REDACT_DRAFT_COLOR)
+        elif self.tool is Tool.ADD_TEXT:  # bulle de texte qui s'étire
+            accent = theme.color("accent")
+            fill = QColor(accent)
+            fill.setAlpha(25)
+            painter.setPen(QPen(accent, 1.5, Qt.PenStyle.DashLine))
+            painter.setBrush(fill)
+            painter.drawRoundedRect(rect, 4, 4)
         else:
             if self.tool is not Tool.RECT:  # cadres à placer : pointillés
                 pen.setStyle(Qt.PenStyle.DashLine)
@@ -575,25 +639,38 @@ class PdfView(QGraphicsView):
         return True
 
     def mousePressEvent(self, event) -> None:
+        if self.inline is not None:  # un clic ailleurs valide la saisie en cours
+            self.finish_inline()
+            return
         if self.tool is Tool.HAND or event.button() != Qt.MouseButton.LeftButton:
             super().mousePressEvent(event)
             return
-        hit = self._page_point(event.position().toPoint())
+        pos = event.position().toPoint()
+        hit = self._page_point(pos)
         self.selection, self._sel_page, self._sel_start = [], None, None
         if hit is None:
             self.select_annot(None)
             return
         page, pt = hit
-        if self.tool is Tool.SELECT:
+        if self.tool in (Tool.SELECT, Tool.ADD_TEXT):
+            current = self.selected_annot  # la poignée déborde du cadre : testée d'abord
+            if current and current[3] in A.RESIZABLE:
+                anchor = self._handle_anchor(current[0], current[2], pos)
+                if anchor is not None:
+                    self._drag = {"kind": "annot_resize", "page": current[0], "anchor": anchor,
+                                  "start": pt, "end": self._to_page(current[0], pos)}
+                    return
             found = A.find_at(self.doc, page, pt)
-            if found:
+            if found and (self.tool is Tool.SELECT or found[1] == "Typewriter"):
                 xref, kind, rect = found
                 self.selected_annot = (page, xref, rect, kind)
                 self.annot_selected.emit((page, xref))
-                if kind in A.MOVABLE:
-                    self._drag = {"kind": "move", "page": page, "start": pt, "end": pt}
+                if kind in A.MOVABLE:  # avec « Ajouter du texte », un simple clic l'édite
+                    self._drag = {"kind": "move", "page": page, "start": pt, "end": pt,
+                                  "click_edits": self.tool is Tool.ADD_TEXT}
                 self.viewport().update()
                 return
+        if self.tool is Tool.SELECT:
             self.select_annot(None)
             field = next((f for f in reversed(self.fields(page)) if f.rect.contains(pt)), None)
             if field:
@@ -652,6 +729,14 @@ class PdfView(QGraphicsView):
                 d = drag["end"] - drag["start"]
                 if abs(d.x) + abs(d.y) > 0.5 and self.selected_annot:
                     self.annot_moved.emit(page, self.selected_annot[1], d.x, d.y)
+                elif drag.get("click_edits") and self.selected_annot:
+                    self.annot_edit_requested.emit(page, self.selected_annot[1])
+            elif drag["kind"] == "annot_resize" and self.selected_annot:
+                self._drag = drag
+                rect = self._annot_preview()
+                self._drag = None
+                if rect != self.selected_annot[2]:
+                    self.annot_resized.emit(page, self.selected_annot[1], rect)
             elif drag["kind"] in ("img_move", "img_resize") and self.selected_image:
                 self._drag = drag  # pour calculer l'aperçu final
                 new_rect = self._image_preview()
@@ -681,6 +766,7 @@ class PdfView(QGraphicsView):
     # ----- événements ---------------------------------------------------------------------
 
     def resizeEvent(self, event) -> None:
+        self.finish_inline()
         super().resizeEvent(event)
         if self.fit is not FitMode.NONE:
             self._relayout()
@@ -710,6 +796,113 @@ class PdfView(QGraphicsView):
             self.previous_page()
         else:
             super().keyPressEvent(event)
+
+
+class InlineEditor(QPlainTextEdit):
+    """Saisie directement sur la page : cadre pointillé, posé sur le texte, qui s'agrandit
+    avec lui. Clic ailleurs ou Ctrl+Entrée : valider ; Échap : abandonner."""
+
+    def __init__(self, view: PdfView, page: int, rect: pymupdf.Rect, text: str, font: QFont,
+                 color: QColor, wrap: bool, opaque: bool, on_commit) -> None:
+        super().__init__(view.viewport())
+        self.view, self.page, self.rect_pt, self.on_commit = view, page, rect, on_commit
+        self.wrap, self.done = wrap, False
+        self.setFrameShape(QFrame.Shape.NoFrame)
+        self.setFont(font)
+        self.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth if wrap
+                             else QPlainTextEdit.LineWrapMode.NoWrap)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        accent = theme.current["accent"]
+        background = "#FFFFFF" if opaque else "rgba(255, 255, 255, 0.7)"
+        self.setStyleSheet(f"QPlainTextEdit {{ background: {background}; color: {color.name()};"
+                           f" border: 1.5px dashed {accent}; border-radius: 3px; padding: 0px;"
+                           f" selection-background-color: {accent}; }}")
+        self.document().setDocumentMargin(2)
+        self.setPlainText(text)
+        self.moveCursor(self.textCursor().MoveOperation.End)
+        self.document().contentsChanged.connect(self.fit)
+        self.place()
+        self.show()
+        self.setFocus()
+
+    def _base(self) -> QRectF:
+        """Cadre d'origine, en pixels de la zone d'affichage."""
+        v = self.view
+        r = to_qrect(self.rect_pt, v.doc.text_matrix(self.page, v.zoom, v.rotation))
+        top_left = v.mapFromScene(v.items_[self.page].mapToScene(r.topLeft()))
+        return QRectF(top_left.toPointF(), r.size())
+
+    def place(self) -> None:
+        self.move(self._base().topLeft().toPoint())
+        self.fit()
+
+    def fit(self) -> None:
+        base, fm = self._base(), self.fontMetrics()
+        doc = self.document()
+        lines = 0
+        widest = 0.0
+        block = doc.begin()
+        while block.isValid():
+            layout = block.layout()
+            lines += max(1, layout.lineCount() if layout else 1)
+            widest = max(widest, fm.horizontalAdvance(block.text()))
+            block = block.next()
+        height = lines * fm.lineSpacing() + 2 * doc.documentMargin() + 6
+        width = base.width() if self.wrap else max(base.width(), widest + 16)
+        self.resize(round(width), round(max(base.height(), height)))
+
+    def event(self, event) -> bool:
+        # Raccourcis de la fenêtre (Échap = outil Sélection, V, H, Suppr…) : pendant la
+        # saisie, ces touches reviennent au texte.
+        if event.type() == QEvent.Type.ShortcutOverride and not (
+                event.modifiers() & (Qt.KeyboardModifier.ControlModifier
+                                     | Qt.KeyboardModifier.AltModifier)):
+            event.accept()
+            return True
+        return super().event(event)
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key.Key_Escape:
+            self.cancel()
+        elif (event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
+              and event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+            self.commit()
+        else:
+            super().keyPressEvent(event)
+            if self.wrap:
+                self.fit()
+
+    def focusOutEvent(self, event) -> None:
+        super().focusOutEvent(event)
+        if not self.done and self.view.inline is self:
+            QTimer.singleShot(0, self.commit)  # après le clic qui a pris le focus
+
+    def _close(self) -> None:
+        self.done = True
+        if self.view.inline is self:
+            self.view.inline = None
+        self.hide()
+        self.deleteLater()
+
+    def page_rect(self) -> pymupdf.Rect:
+        """Cadre actuel (agrandi par la saisie), dans le repère du texte de la page."""
+        g = self.geometry()
+        a = self.view._to_page(self.page, g.topLeft())
+        b = self.view._to_page(self.page, g.bottomRight())
+        return pymupdf.Rect(a, b).normalize()
+
+    def commit(self) -> None:
+        if self.done:
+            return
+        text, rect = self.toPlainText(), self.page_rect()
+        self._close()
+        self.on_commit(text, rect)
+
+    def cancel(self) -> None:
+        if not self.done:
+            self._close()
+            self.view.viewport().update()
 
 
 class PresentationView(QWidget):

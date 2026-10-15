@@ -22,6 +22,7 @@ Compression=lzma2/max
 SolidCompression=yes
 ChangesAssociations=yes
 UninstallDisplayIcon={app}\PDFManager.exe
+SetupIconFile=pdfmanager.ico
 WizardStyle=modern
 
 [Languages]
