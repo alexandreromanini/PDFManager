@@ -2,6 +2,26 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [0.2.0] — 2026-10-15
+
+Phase 2 — annotations et commentaires.
+
+### Ajouté
+- Barre **Commenter** : surligner, souligner, barrer, note, texte libre, rectangle, ellipse,
+  ligne, flèche, dessin à main levée, tampons standard ; couleur par outil et épaisseur.
+- Sélection d'un commentaire sur la page, déplacement par glisser, modification du texte,
+  changement de couleur, suppression (Suppr).
+- Panneau **Commentaires** : liste par page avec auteur et date, navigation, édition.
+- **Annuler / Rétablir** (Ctrl+Z / Ctrl+Y) sur toutes les éditions, via le journal natif MuPDF ;
+  une opération qui échoue est défaite et ne peut pas être « rétablie ».
+- **Enregistrer** (confirmation d'écrasement une fois par document), **Enregistrer sous**,
+  indicateur « * » de document modifié, confirmation à la fermeture.
+- Nom de l'auteur des commentaires configurable.
+
+### Corrigé
+- Sauvegarde atomique sous Windows : le fichier temporaire est fermé avant d'être supprimé
+  en cas d'échec (WinError 32).
+
 ## [0.1.0] — 2026-10-15
 
 Phase 1 — lecteur.
