@@ -2,6 +2,25 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [0.4.0] — 2026-10-15
+
+Phase 4 — édition.
+
+### Ajouté
+- Barre et menu **Modifier** : modifier un texte existant (police d'origine si elle contient
+  les caractères, sinon police standard la plus proche, avec avertissement), ajouter du texte,
+  insérer / déplacer / redimensionner / supprimer des images, créer, suivre et supprimer des
+  liens (adresse web, e-mail, page).
+- **Caviardage définitif** : zones tracées ou recherche dans tout le document, marquage
+  réversible puis application (texte, pixels d'image, tracés et commentaires chevauchants).
+- **Nettoyer le document** : métadonnées, JavaScript, fichiers joints, miniatures, et en
+  option texte invisible, liens, valeurs de formulaires.
+- Clic sur un lien avec l'outil Sélection (confirmation avant d'ouvrir une adresse web).
+
+### Sécurité
+- L'enregistrement nettoie le fichier (ramasse-miettes sur une copie) : l'image d'origine
+  restait jusqu'ici dans le fichier à côté de sa version caviardée.
+
 ## [0.3.1] — 2026-10-15
 
 ### Corrigé

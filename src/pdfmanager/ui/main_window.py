@@ -38,6 +38,7 @@ from pdfmanager import __version__
 from pdfmanager.core import text
 from pdfmanager.core.document import PdfDocument, PdfError
 from pdfmanager.ui.annotate import Annotator
+from pdfmanager.ui.edit import Editor
 from pdfmanager.ui.organize import PageOrganizer
 from pdfmanager.ui.sidebar import Sidebar
 from pdfmanager.ui.viewer import FitMode, PdfView, PresentationView, ViewMode, to_qimage
@@ -190,6 +191,7 @@ class MainWindow(QMainWindow):
 
         self.annotator = Annotator(self)
         self.organizer = PageOrganizer(self)
+        self.editor = Editor(self)
         self._build_ui()
         self.apply_theme(self.settings.value("theme", "system"))
         if geometry := self.settings.value("geometry"):
@@ -306,6 +308,7 @@ class MainWindow(QMainWindow):
         self.theme_group.triggered.connect(lambda a: self.apply_theme(a.data()))
 
         bar.addMenu(self.organizer.menu)
+        bar.addMenu(self.editor.menu)
 
         m = bar.addMenu("&Commentaires")
         for tool_action in self.annotator.actions.values():
@@ -361,6 +364,8 @@ class MainWindow(QMainWindow):
 
         self.addToolBarBreak()
         self.addToolBar(self.annotator.toolbar)
+        self.addToolBarBreak()
+        self.addToolBar(self.editor.toolbar)
 
     # ----- accès à l'onglet courant -------------------------------------------------------
 
@@ -382,9 +387,10 @@ class MainWindow(QMainWindow):
                   self.act_close, self.act_copy, self.act_find, self.act_prev, self.act_next,
                   self.act_zoom_in, self.act_zoom_out, self.act_fit_width, self.act_fit_page,
                   self.act_rot_left, self.act_rot_right, self.act_present,
-                  self.act_delete, *self.organizer.tab_actions):
+                  self.act_delete, *self.organizer.tab_actions, *self.editor.tab_actions):
             a.setEnabled(tab is not None)
-        for w in (self.page_spin, self.zoom_combo, self.search_edit, self.annotator.toolbar):
+        for w in (self.page_spin, self.zoom_combo, self.search_edit, self.annotator.toolbar,
+                  self.editor.text_size):
             w.setEnabled(tab is not None)
         for i in range(self.tabs.count()):
             t = self.tabs.widget(i)
@@ -454,6 +460,7 @@ class MainWindow(QMainWindow):
         tab.modified_changed.connect(self._sync)
         self.annotator.attach(tab)
         self.organizer.attach(tab)
+        self.editor.attach(tab)
         i = self.tabs.addTab(tab, path.name)
         self.tabs.setTabToolTip(i, str(path))
         self.tabs.setCurrentIndex(i)
@@ -633,10 +640,13 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("Texte copié", 2000)
 
     def _delete(self) -> None:
-        """Suppr : les pages si les vignettes ont le focus, sinon le commentaire sélectionné."""
+        """Suppr : les pages si les vignettes ont le focus, sinon l'image ou le commentaire
+        sélectionné."""
         tab = self.current_tab()
         if tab and tab.sidebar.thumbs.hasFocus():
             self.organizer.delete(tab)
+        elif tab and tab.view.selected_image:
+            self.editor.delete_selected_image(tab)
         else:
             self.annotator.delete_selected()
 
