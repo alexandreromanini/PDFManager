@@ -236,6 +236,16 @@ class Tools(QObject):
             QMessageBox.warning(self.window, "Opération impossible", str(e))
         return None
 
+    def _save(self, target: Path, data: bytes) -> bool:
+        """Écrit un résultat déjà calculé ; en cas d'échec, un message clair (le calcul n'est
+        pas à refaire si l'on choisit un autre dossier)."""
+        try:
+            write_atomic(target, lambda: data)
+        except OSError as e:
+            QMessageBox.warning(self.window, "Enregistrement impossible", str(e))
+            return False
+        return True
+
     def _target(self, title: str, default: Path, file_filter: str, suffix: str) -> Path | None:
         """Fichier de sortie ; le dialogue confirme l'écrasement, on reconfirme si
         l'extension a dû être ajoutée (autre nom que celui confirmé)."""
@@ -290,7 +300,8 @@ class Tools(QObject):
                                     f"Aucun gain possible à ce niveau ({size_text(before)}) : "
                                     "rien n'a été écrit.")
             return
-        write_atomic(target, lambda: data)
+        if not self._save(target, data):
+            return
         gain = 100 - 100 * len(data) // before
         if QMessageBox.question(
                 self.window, "Réduire la taille",
@@ -394,7 +405,8 @@ class Tools(QObject):
         if result is None:
             return
         pdf, notes = result
-        write_atomic(target, lambda: pdf)
+        if not self._save(target, pdf):
+            return
         details = ("\n\nGhostscript signale :\n" + "\n".join(notes[:6])) if notes else ""
         QMessageBox.information(self.window, "PDF/A",
                                 f"PDF/A-2b validé et enregistré : {target.name}{details}")
@@ -468,8 +480,7 @@ class Tools(QObject):
         if not target:
             return
         txt = self._run("Extraction du texte…", lambda task: convert.to_text(doc))
-        if txt is not None:
-            write_atomic(target, lambda: txt.encode("utf-8"))
+        if txt is not None and self._save(target, txt.encode("utf-8")):
             self._status(f"Texte enregistré : {target}")
 
     # ----- créer ------------------------------------------------------------------------------
@@ -490,8 +501,7 @@ class Tools(QObject):
         if not target:
             return
         data = self._run("Création du PDF…", lambda task: convert.images_to_pdf(images))
-        if data is not None:
-            write_atomic(target, lambda: data)
+        if data is not None and self._save(target, data):
             self.window.open_path(target)
 
     def from_office(self) -> None:

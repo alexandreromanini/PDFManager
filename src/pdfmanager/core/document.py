@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import io
 import os
 import tempfile
@@ -39,6 +40,21 @@ class Cancelled(Exception):
     """Opération longue abandonnée par l'utilisateur."""
 
 
+_REASONS = {
+    errno.EACCES: "accès refusé (dossier protégé, ou fichier ouvert dans un autre programme)",
+    errno.EPERM: "accès refusé (dossier protégé, ou fichier ouvert dans un autre programme)",
+    errno.ENOSPC: "le disque est plein",
+    errno.EROFS: "le support est en lecture seule",
+    errno.ENOENT: "introuvable (déplacé ou supprimé ?)",
+    errno.ENAMETOOLONG: "le nom est trop long",
+}
+
+
+def reason(e: OSError) -> str:
+    """Cause d'une erreur système en français, sans code ni chemin de fichier temporaire."""
+    return _REASONS.get(e.errno) or e.strerror or str(e)
+
+
 def long_path(path: str | os.PathLike[str], *, windows: bool = os.name == "nt") -> str:
     """Chemin absolu utilisable même au-delà de 260 caractères sous Windows (préfixe \\\\?\\)."""
     s = os.fspath(path)
@@ -66,7 +82,7 @@ class PdfDocument:
             with open(long_path(self.path), "rb") as f:
                 data = f.read()
         except OSError as e:
-            raise PdfError(f"Impossible d'ouvrir « {self.path.name} » :\n{e}") from e
+            raise PdfError(f"Impossible d'ouvrir « {self.path.name} » : {reason(e)}.") from e
         # repaired : fichier endommagé, reconstruit en mémoire (enregistrer pour le garder)
         self.doc, self.repaired = _open_repairing(data, self.path.name)
         self.version = 0  # incrémenté à chaque modification : invalide les rendus en cache
@@ -385,7 +401,10 @@ def write_atomic(target: str | os.PathLike[str], produce: Callable[[], bytes]) -
     """Écrit dans un fichier temporaire du même dossier puis le substitue d'un coup :
     en cas d'erreur, le fichier cible d'origine reste intact."""
     target = Path(target).absolute()
-    fd, tmp = tempfile.mkstemp(dir=long_path(target.parent), prefix=".~", suffix=".pdf.tmp")
+    try:
+        fd, tmp = tempfile.mkstemp(dir=long_path(target.parent), prefix=".~", suffix=".tmp")
+    except OSError as e:
+        raise _write_error(e, target) from e
     try:
         # fdopen d'abord : le descripteur est fermé même si produce() échoue, sinon
         # Windows refuse ensuite de supprimer le fichier temporaire (WinError 32).
@@ -395,6 +414,15 @@ def write_atomic(target: str | os.PathLike[str], produce: Callable[[], bytes]) -
             f.flush()
             os.fsync(f.fileno())  # contenu sur disque avant la substitution
         os.replace(tmp, long_path(target))
+    except OSError as e:
+        Path(tmp).unlink(missing_ok=True)
+        raise _write_error(e, target) from e
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
         raise
+
+
+def _write_error(e: OSError, target: Path) -> OSError:
+    """OSError au message présentable : les interfaces affichent str(e) telle quelle."""
+    return OSError(f"Impossible d'enregistrer « {target.name} » dans « {target.parent} » : "
+                   f"{reason(e)}.")
