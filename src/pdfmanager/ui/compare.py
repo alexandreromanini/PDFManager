@@ -3,6 +3,8 @@ rouge à gauche, ajoutés en vert à droite, liste des différences pour navigue
 
 from __future__ import annotations
 
+import html
+
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
@@ -78,7 +80,7 @@ class ComparisonWindow(QWidget):
         w = QWidget()
         v = QVBoxLayout(w)
         v.setContentsMargins(0, 0, 0, 0)
-        v.addWidget(QLabel(f"<b>{title}</b> - {doc.path.name}"))
+        v.addWidget(QLabel(f"<b>{title}</b> - {html.escape(doc.path.name)}"))
         v.addWidget(view)
         return w
 
