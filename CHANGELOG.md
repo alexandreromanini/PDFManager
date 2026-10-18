@@ -2,6 +2,21 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [0.10.0] - 2026-10-18
+
+### Ajouté
+- **Assistant IA hors ligne** (onglet *Assistant* du rail de droite) : résumer le document,
+  lui poser des questions ; réponse au fil de l'eau, pages citées cliquables, bouton Arrêter.
+  Modèle Qwen3 4B Instruct (Apache-2.0, 2,5 Go) exécuté sur l'ordinateur par llama.cpp :
+  rien n'est envoyé sur internet. Le document reste en mémoire du modèle : après la première
+  lecture, les questions suivantes partent en quelques secondes. Long document : extraits
+  pertinents pour une question, début de chaque page pour un résumé.
+- Installeur : case facultative *Assistant IA* qui télécharge le modèle (empreinte vérifiée) ;
+  sinon téléchargement depuis le panneau. Le modèle est supprimé à la désinstallation.
+
+### Modifié
+- Installeur en UTF-8 : ses textes peuvent porter des accents.
+
 ## [0.9.2] - 2026-10-18
 
 ### Modifié

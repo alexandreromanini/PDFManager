@@ -76,6 +76,7 @@ class DocumentTab(QSplitter):
         self.setSizes([900, 250])
         self.sidebar.page_requested.connect(self.view.go_to_page)
         self.view.page_changed.connect(self.sidebar.set_current)
+        self.sidebar.currentChanged.connect(self._widen_for_assistant)
         self.overwrite_confirmed = False  # l'utilisateur a accepté d'écraser le fichier
         self._structure = doc.structure()
 
@@ -86,6 +87,13 @@ class DocumentTab(QSplitter):
         self._search_task: Task | None = None
         self._search_pool = QThreadPool(self)
         self._search_pool.setMaxThreadCount(1)
+
+    def _widen_for_assistant(self) -> None:
+        """Une conversation a besoin de place : le rail s'élargit pour l'assistant."""
+        if self.sidebar.currentWidget() is self.sidebar.assistant:
+            view, rail = self.sizes()
+            if rail < 380:
+                self.setSizes([max(300, view + rail - 380), 380])
 
     def apply(self, fn, *args, **kwargs):
         """Exécute une modification du document (fonction de core) ; en cas d'erreur, un

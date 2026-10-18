@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from pdfmanager.core import annotations as A
 from pdfmanager.core.document import PdfDocument
+from pdfmanager.ui.assistant import AssistantPanel
 from pdfmanager.ui.icons import icon
 from pdfmanager.ui.viewer import to_qimage
 from pdfmanager.ui.workers import Task
@@ -196,6 +197,10 @@ class Sidebar(QTabWidget):
 
         self.signatures = SignaturesPanel()
         self._add(self.signatures, "Signatures", "badge-check")
+
+        self.assistant = AssistantPanel(doc)
+        self.assistant.page_requested.connect(self.page_requested)
+        self._add(self.assistant, "Assistant IA", "bot-message-square")
 
     def _add(self, widget, label: str, icon_name: str) -> None:
         self.setTabToolTip(self.addTab(widget, icon(icon_name), ""), label)

@@ -18,12 +18,13 @@ Usage strictement personnel (PyMuPDF est sous AGPL).
 | 7 | Refonte visuelle (Windows 11, panneau d'outils, accueil) | ✅ 0.7.0 |
 | 7b | Logo, modifier / ajouter du texte sur la page | ✅ 0.8.3 |
 | - | Mises à jour depuis l'application, nouveau logo | ✅ 0.9.2 |
+| 8 | Assistant IA hors ligne (résumé, questions) | ✅ 0.10.0 |
 
 ## Développement (Linux)
 
 ```bash
 python3.12 -m venv .venv
-.venv/bin/pip install -e ".[dev,build]"
+.venv/bin/pip install -e ".[dev,build]"   # compile llama.cpp (cmake, g++) : quelques minutes
 .venv/bin/python -m pdfmanager [fichier.pdf ...]   # lancer
 .venv/bin/python -m pytest -q                      # tests (Qt hors écran, aucun affichage requis)
 .venv/bin/ruff check .                             # lint
@@ -191,6 +192,25 @@ Panneau d'outils → **Formulaires** : **Champ texte**, **Case à cocher**, **Li
 par défaut), puis nommer le champ. Un simple clic sur un champ existant avec l'un de ces
 outils propose de le supprimer.
 
+### Assistant IA (facultatif, hors ligne)
+
+Rail de droite → onglet **Assistant** (ou panneau d'outils → *Résumer, poser des questions*) :
+**Résumer le document**, ou poser une question. La réponse s'écrit au fil de l'eau et cite
+ses pages : `p. 3` est un lien vers la page. **Arrêter** interrompt la réponse.
+
+- Modèle : **Qwen3 4B Instruct 2507** (Apache-2.0, quantifié Q4_K_M, 2,5 Go), exécuté par
+  **llama.cpp** sur le processeur. Rien ne quitte l'ordinateur ; aucun compte, aucune limite.
+- Installation : case *Assistant IA* de l'installeur (le modèle est téléchargé et vérifié
+  pendant l'installation), sinon bouton **Télécharger l'assistant** dans le panneau. Le modèle
+  est rangé dans `%LOCALAPPDATA%\PDFManager\ai` et supprimé à la désinstallation.
+- Mémoire : ~3,5 Go pendant l'usage ; 8 Go de RAM conseillés.
+- Vitesse (processeur seul) : le document est lu une fois (jusqu'à ~12 000 caractères, soit
+  4 à 6 pages denses), ce qui prend ~30 s à 2 min selon l'âge du PC ; les questions suivantes
+  partent ensuite en quelques secondes. Mesuré sur un i7-8750H (2018) : résumé d'un bail de
+  2 pages en 33 s, question suivante en 10 s.
+- Long document : une question n'envoie que les extraits qui en partagent les mots ; le résumé
+  s'appuie sur le début de chaque page (l'assistant le signale).
+
 ### Signer
 
 - **Signature visuelle…** : dessiner (souris ou stylet), taper son nom (police manuscrite)
@@ -220,6 +240,12 @@ Enregistrer / Ne pas enregistrer / Annuler. Les annotations sont écrites avec l
 d'apparence (/AP) : vérifié par un moteur de rendu indépendant (Ghostscript).
 
 ## Limites connues (assumées)
+
+- **Assistant IA** : un petit modèle peut se tromper ou mal lire un tableau ; les pages citées
+  permettent de vérifier. Recherche des extraits par mots-clés (un synonyme ne suffit pas).
+  Long document : résumé d'après le début de chaque page, pas d'une lecture intégrale.
+  Arrêter n'agit qu'une fois la lecture du document terminée. Pas de carte graphique utilisée
+  (moteur CPU) ; processeur avec AVX2 requis (PC postérieurs à 2013 environ).
 
 - **Rendu bloquant sur pages très lourdes** : PyMuPDF garde le GIL pendant le rendu ; le thread
   évite de figer l'interface entre deux pages, pas pendant une page de plusieurs secondes
