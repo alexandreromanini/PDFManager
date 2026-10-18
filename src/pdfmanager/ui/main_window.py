@@ -682,6 +682,13 @@ class MainWindow(QMainWindow):
             return
         self._view_do(lambda v: v.set_zoom(zoom))
 
+    def show_sidebar(self, widget) -> None:
+        """Affiche le rail sur `widget` (un de ses onglets), case « Panneau latéral » comprise."""
+        if not self.act_sidebar.isChecked():
+            self.act_sidebar.trigger()
+        if tab := self.current_tab():
+            tab.sidebar.setCurrentWidget(widget)
+
     def _toggle_sidebar(self, on: bool) -> None:
         for i in range(self.tabs.count()):
             self.tabs.widget(i).sidebar.setVisible(on)
