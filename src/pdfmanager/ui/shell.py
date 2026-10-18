@@ -431,24 +431,17 @@ class Shell(QObject):
     def _entries(self) -> list[tuple[str, list[Entry]]]:
         w = self.window
         return [
-            ("Assistant IA", [
-                Entry("assistant", "Résumer, poser des questions", "bot-message-square",
-                      run=lambda: self._sidebar("assistant"))]),
-            ("Modifier", [
-                Entry("edit", "Modifier le texte et les images", "file-pen-line",
-                      self._page_edit),
-                Entry("comment", "Commenter", "message-square", self._page_comment),
-                Entry("forms", "Formulaires", "text-cursor-input", self._page_forms)]),
             ("Organiser", [
                 Entry("organize", "Organiser les pages", "layout-grid", self._page_organize),
                 Entry("merge", "Fusionner des PDF", "combine", run=w.organizer.merge,
                       needs_doc=False),
                 Entry("split", "Scinder un PDF", "scissors",
                       run=lambda: w.organizer.act_split.trigger())]),
-            ("Signer et protéger", [
-                Entry("sign", "Signer", "signature", self._page_sign),
-                Entry("protect", "Protéger par mot de passe", "lock", self._page_protect),
-                Entry("redact", "Caviarder", "eraser", self._page_redact)]),
+            ("Modifier", [
+                Entry("edit", "Modifier le texte et les images", "file-pen-line",
+                      self._page_edit),
+                Entry("comment", "Commenter", "message-square", self._page_comment),
+                Entry("forms", "Formulaires", "text-cursor-input", self._page_forms)]),
             ("Convertir et optimiser", [
                 Entry("ocr", "Reconnaître le texte (OCR)", "scan-text",
                       run=lambda: w.tools.act_ocr.trigger()),
@@ -460,6 +453,13 @@ class Shell(QObject):
                       run=lambda: w.tools.act_compare.trigger()),
                 Entry("pdfa", "Archiver (PDF/A)", "archive",
                       run=lambda: w.tools.act_pdfa.trigger())]),
+            ("Signer et protéger", [
+                Entry("sign", "Signer", "signature", self._page_sign),
+                Entry("protect", "Protéger par mot de passe", "lock", self._page_protect),
+                Entry("redact", "Caviarder", "eraser", self._page_redact)]),
+            ("Assistant IA", [
+                Entry("assistant", "Résumer, poser des questions", "bot-message-square",
+                      run=lambda: self._sidebar("assistant"))]),
         ]
 
     def entry(self, key: str) -> Entry:
