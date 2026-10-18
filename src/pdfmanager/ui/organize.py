@@ -44,6 +44,23 @@ IMAGE_EXT = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".gif", ".webp"}
 RANGE_HELP = "Exemples : 1-3, 5, 8-  (vide = toutes les pages)"
 
 
+def ask_target(parent: QWidget, title: str, default: Path, file_filter: str = PDF_FILTER,
+               suffix: str = ".pdf") -> Path | None:
+    """Fichier de sortie, extension garantie. Le dialogue confirme l'écrasement ; on
+    reconfirme si l'extension a dû être ajoutée (ce n'est plus le nom confirmé)."""
+    target, _ = QFileDialog.getSaveFileName(parent, title, str(default), file_filter)
+    if not target:
+        return None
+    path = Path(target)
+    if path.suffix.lower() != suffix:
+        path = path.with_name(path.name + suffix)
+        if path.exists() and QMessageBox.question(
+                parent, "Remplacer ?", f"« {path.name} » existe déjà. Le remplacer ?"
+        ) != QMessageBox.StandardButton.Yes:
+            return None
+    return path
+
+
 def ask_pages(parent: QWidget, title: str, label: str, page_count: int,
               default: str) -> list[int] | None:
     """Demande une plage de pages ; redemande tant qu'elle est invalide."""
@@ -379,6 +396,11 @@ class PageOrganizer(QObject):
     def delete(self, tab) -> None:
         pages = self.selection(tab)
         n = len(pages)
+        if n >= tab.doc.page_count:  # refusé avant de demander confirmation
+            QMessageBox.information(self.window, "Supprimer des pages",
+                                    "Un PDF doit garder au moins une page : sélectionnez "
+                                    "seulement les pages à retirer.")
+            return
         if QMessageBox.question(
                 self.window, "Supprimer des pages",
                 f"Supprimer {n} page{'s' * (n > 1)} ({P.format_pages(pages)}) ?\n"
@@ -436,8 +458,8 @@ class PageOrganizer(QObject):
         if not pages:
             return
         name = P.safe_filename(f"{doc.path.stem} - pages {P.format_pages(pages)}") + ".pdf"
-        target, _ = QFileDialog.getSaveFileName(self.window, "Enregistrer les pages extraites",
-                                                str(doc.path.with_name(name)), PDF_FILTER)
+        target = ask_target(self.window, "Enregistrer les pages extraites",
+                            doc.path.with_name(name))
         if not target:
             return
         try:
@@ -484,9 +506,8 @@ class PageOrganizer(QObject):
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         paths = dlg.paths()
-        target, _ = QFileDialog.getSaveFileName(
-            self.window, "Enregistrer le PDF fusionné",
-            str(paths[0].with_name(f"{paths[0].stem} - fusion.pdf")), PDF_FILTER)
+        target = ask_target(self.window, "Enregistrer le PDF fusionné",
+                            paths[0].with_name(f"{paths[0].stem} - fusion.pdf"))
         if not target:
             return
         sources = []

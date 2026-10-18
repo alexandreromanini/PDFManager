@@ -28,7 +28,7 @@ from pdfmanager.core.document import Cancelled, PdfError, write_atomic
 from pdfmanager.services import external, jobs
 from pdfmanager.ui.compare import ComparisonWindow
 from pdfmanager.ui.icons import icon
-from pdfmanager.ui.organize import IMAGE_FILTER, PDF_FILTER, _Dialog, _PagesField
+from pdfmanager.ui.organize import IMAGE_FILTER, PDF_FILTER, _Dialog, _PagesField, ask_target
 from pdfmanager.ui.workers import run_busy
 
 log = logging.getLogger(__name__)
@@ -247,19 +247,7 @@ class Tools(QObject):
         return True
 
     def _target(self, title: str, default: Path, file_filter: str, suffix: str) -> Path | None:
-        """Fichier de sortie ; le dialogue confirme l'écrasement, on reconfirme si
-        l'extension a dû être ajoutée (autre nom que celui confirmé)."""
-        target, _ = QFileDialog.getSaveFileName(self.window, title, str(default), file_filter)
-        if not target:
-            return None
-        path = Path(target)
-        if path.suffix.lower() != suffix:
-            path = path.with_name(path.name + suffix)
-            if path.exists() and QMessageBox.question(
-                    self.window, "Remplacer ?", f"« {path.name} » existe déjà. Le remplacer ?"
-            ) != QMessageBox.StandardButton.Yes:
-                return None
-        return path
+        return ask_target(self.window, title, default, file_filter, suffix)
 
     # ----- outils sur le document -------------------------------------------------------------
 
