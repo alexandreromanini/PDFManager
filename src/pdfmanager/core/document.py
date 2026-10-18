@@ -367,8 +367,9 @@ def _open_repairing(data: bytes, name: str) -> tuple[pymupdf.Document, bool]:
                 pdf.save(out)
             return pymupdf.open(stream=out.getvalue(), filetype="pdf"), True
         except Exception:
-            raise PdfError(f"Impossible d'ouvrir « {name} » (fichier illisible, même "
-                           f"après tentative de réparation) :\n{first}") from first
+            # détail technique de MuPDF (« Failed to open stream ») : dans le journal seulement
+            raise PdfError(f"Impossible d'ouvrir « {name} » : ce n'est pas un PDF valide, ou il "
+                           "est trop endommagé pour être réparé.") from first
 
 
 def is_signed(doc: pymupdf.Document) -> bool:
