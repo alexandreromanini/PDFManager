@@ -379,7 +379,7 @@ class MainWindow(QMainWindow):
 
     def _sync(self, *_) -> None:
         tab = self.current_tab()
-        for a in (self.act_save, self.act_save_as, self.act_save_copy, self.act_print,
+        for a in (self.act_save_as, self.act_save_copy, self.act_print,
                   self.act_close, self.act_copy, self.act_find, self.act_prev, self.act_next,
                   self.act_zoom_in, self.act_zoom_out, self.act_fit_width, self.act_fit_page,
                   self.act_rot_left, self.act_rot_right, self.act_present,
@@ -392,6 +392,8 @@ class MainWindow(QMainWindow):
             w.setEnabled(tab is not None)
         for a in self.annotator.actions.values():
             a.setEnabled(tab is not None)
+        # Rien à enregistrer : bouton éteint (un fichier réparé en mémoire, lui, se garde).
+        self.act_save.setEnabled(tab is not None and (tab.doc.modified or tab.doc.repaired))
         for i in range(self.tabs.count()):
             # Pendant la fermeture de l'onglet courant, Qt signale le changement d'onglet
             # alors que la page est déjà retirée : l'index ne désigne plus aucun document.

@@ -249,6 +249,7 @@ class PdfDocument:
         self.save_atomic(target)
         self.path = target
         self._saved = self._pos
+        self.repaired = False  # la version réparée est désormais le fichier
 
     def snapshot(self) -> pymupdf.Document:
         """Copie déchiffrée et sans journal, pour lire des pages depuis ce document :
