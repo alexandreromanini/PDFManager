@@ -158,3 +158,21 @@ def test_scrolling_keeps_multi_selection(qtbot, win, sample_pdf):
     assert tab.sidebar.thumbs.selected_pages() == [0, 2]
     tab.sidebar.set_current(1)  # page hors sélection : la sélection la suit
     assert tab.sidebar.thumbs.selected_pages() == [1]
+
+
+def test_delete_all_pages_refused_before_asking(qtbot, win, sample_pdf, monkeypatch):
+    tab = win.open_path(sample_pdf)
+    tab.sidebar.select_pages([0, 1, 2])
+    told = []
+    monkeypatch.setattr(QMessageBox, "information", lambda *a: told.append(a[2]))
+    win.organizer.delete(tab)  # aucune question : no_unexpected_dialogs échouerait
+    assert "au moins une page" in told[0] and tab.doc.page_count == 3
+
+
+def test_extract_adds_pdf_extension(qtbot, win, sample_pdf, tmp_path, monkeypatch):
+    tab = win.open_path(sample_pdf)
+    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("2", True))
+    monkeypatch.setattr(QFileDialog, "getSaveFileName",
+                        lambda *a, **k: (str(tmp_path / "pages"), ""))
+    win.organizer.extract(tab)
+    assert (tmp_path / "pages.pdf").exists() and not (tmp_path / "pages").exists()

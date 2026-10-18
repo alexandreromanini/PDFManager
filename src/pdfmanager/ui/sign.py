@@ -50,7 +50,7 @@ from pdfmanager.core import pages as P
 from pdfmanager.core import signatures as S
 from pdfmanager.core.document import PdfError, pdf_lock, write_atomic
 from pdfmanager.ui.icons import icon
-from pdfmanager.ui.organize import IMAGE_FILTER, PDF_FILTER, _Dialog
+from pdfmanager.ui.organize import IMAGE_FILTER, _Dialog, ask_target
 from pdfmanager.ui.viewer import Tool, to_qimage
 from pdfmanager.ui.workers import Cancelled, Task, run_busy
 
@@ -522,11 +522,9 @@ class Signer(QObject):
         if dlg.exec() != QDialog.DialogCode.Accepted:
             return
         default = doc.path.with_name(f"{doc.path.stem} - signé.pdf")
-        target, _ = QFileDialog.getSaveFileName(self.window, "Enregistrer le document signé",
-                                                str(default), PDF_FILTER)
+        target = ask_target(self.window, "Enregistrer le document signé", default)
         if not target:
             return
-        target = Path(target)
         created = field is None
         if created:
             field = F.unique_name(doc, "signature")
