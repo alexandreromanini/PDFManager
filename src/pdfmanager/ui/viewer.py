@@ -358,9 +358,10 @@ class PdfView(QGraphicsView):
 
     def set_mode(self, mode: ViewMode) -> None:
         self.finish_inline()
+        page = self.current_page  # la recomposition peut faire défiler la vue (page 1)
         self.mode = mode
         self._relayout(keep_position=False)
-        self.go_to_page(self.current_page)
+        self.go_to_page(page)
 
     def rotate(self, delta: int) -> None:
         self.finish_inline()
