@@ -50,7 +50,7 @@ ou perdu un document (742 actions automatiques, annuler / rétablir vérifiés �
 |---|---|---|---|
 | D1 | « Propriétés du document » rangé dans le panneau **Protéger** | **Le retirer** du panneau Protéger (il reste dans Fichier et Ctrl+D) | Corrigé (validé) |
 | D2 | **Outils > Réparer un PDF endommagé** fait la même chose qu'Ouvrir | **Supprimer l'entrée** : la réparation est automatique et signalée à l'ouverture | Corrigé (validé) |
-| D3 | **Remplir un champ** ouvre une fenêtre | **Saisie directement dans le champ** (comme Acrobat), Tab pour passer au suivant | Garder la fenêtre (plus simple, fonctionne déjà) |
+| D3 | **Remplir un champ** ouvre une fenêtre | **Saisie directement dans le champ** (comme Acrobat), Tab pour passer au suivant | Corrigé (validé) |
 | D4 | **Panneau d'outils** fixe (272 px) | **Bouton pour le replier** en colonne d'icônes, mémorisé | Ne sera pas corrigé : écarté par décision |
 | D5 | **Plusieurs fenêtres** quand on ouvre des PDF depuis l'Explorateur | **Instance unique** : les PDF s'ouvrent en onglets dans la fenêtre existante | Garder plusieurs fenêtres (indépendantes, mais réglages et récents en concurrence) |
 

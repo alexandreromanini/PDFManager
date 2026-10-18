@@ -41,6 +41,14 @@ class FieldInfo:
     multiline: bool
     editable: bool  # liste déroulante acceptant une saisie libre
     signed: bool
+    fontsize: float = 0.0  # 0 : automatique (le texte remplit la hauteur du champ)
+
+    @property
+    def text_size(self) -> float:
+        """Taille du texte affiché, en points (règle de MuPDF pour la taille automatique)."""
+        if self.fontsize:
+            return self.fontsize
+        return 12.0 if self.multiline else max(6.0, self.rect.height * 0.8)
 
     @property
     def checked(self) -> bool:
@@ -59,7 +67,8 @@ def _info(page: int, w: pymupdf.Widget) -> FieldInfo:
         str(w.field_value or ""), tuple(_choice_label(c) for c in w.choice_values or ()),
         w.rect, bool(flags & pymupdf.PDF_FIELD_IS_READ_ONLY),
         text and bool(flags & pymupdf.PDF_TX_FIELD_IS_MULTILINE),
-        bool(flags & pymupdf.PDF_CH_FIELD_IS_EDIT), bool(w.is_signed))
+        bool(flags & pymupdf.PDF_CH_FIELD_IS_EDIT), bool(w.is_signed),
+        float(w.text_fontsize or 0))
 
 
 def fields(doc: PdfDocument, page: int) -> list[FieldInfo]:

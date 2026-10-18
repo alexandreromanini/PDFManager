@@ -431,22 +431,31 @@ class PdfView(QGraphicsView):
             if info:
                 self.selected_annot = (page, xref, info.rect, info.kind)
                 if reveal:
-                    if self.mode is ViewMode.SINGLE and page != self.current_page:
-                        self.go_to_page(page)
-                    r = to_qrect(info.rect, self.doc.text_matrix(page, self.zoom, self.rotation))
-                    self.ensureVisible(r.translated(self.items_[page].pos()), 80, 80)
+                    self.reveal(page, info.rect)
         self.annot_selected.emit(self.selected_annot[:2] if self.selected_annot else None)
         self.viewport().update()
 
     # ----- saisie sur la page ---------------------------------------------------------------
 
     def edit_inline(self, page: int, rect: pymupdf.Rect, text: str, font: QFont,
-                    color: QColor, *, wrap: bool, opaque: bool, on_commit) -> InlineEditor:
+                    color: QColor, *, wrap: bool, opaque: bool, on_commit, on_tab=None,
+                    enter_commits: bool = False) -> InlineEditor:
         """Ouvre une zone de saisie sur la page, posée sur `rect` (repère du texte).
-        `on_commit(texte, cadre)` reçoit le texte et le cadre final (agrandi au besoin)."""
+        `on_commit(texte, cadre)` reçoit le texte et le cadre final (agrandi au besoin) ;
+        `on_tab(arrière)` : Tab / Maj+Tab valident puis passent au suivant (formulaires) ;
+        `enter_commits` : Entrée valide (champ d'une ligne)."""
         self.finish_inline()
+        self.reveal(page, rect)
         self.inline = InlineEditor(self, page, rect, text, font, color, wrap, opaque, on_commit)
+        self.inline.on_tab, self.inline.enter_commits = on_tab, enter_commits
         return self.inline
+
+    def reveal(self, page: int, rect: pymupdf.Rect) -> None:
+        """Fait défiler la vue jusqu'à `rect` (repère du texte) de la page."""
+        if self.mode is ViewMode.SINGLE and page != self.current_page:
+            self.go_to_page(page)
+        r = to_qrect(rect, self.doc.text_matrix(page, self.zoom, self.rotation))
+        self.ensureVisible(r.translated(self.items_[page].pos()), 80, 80)
 
     def finish_inline(self) -> None:
         if self.inline is not None:
@@ -609,11 +618,7 @@ class PdfView(QGraphicsView):
 
     def show_hit(self, page: int, rect: pymupdf.Rect) -> None:
         self.current_hit = (page, rect)
-        if self.mode is ViewMode.SINGLE and page != self.current_page:
-            self.go_to_page(page)
-        item = self.items_[page]
-        r = to_qrect(rect, self.doc.text_matrix(page, self.zoom, self.rotation))
-        self.ensureVisible(r.translated(item.pos()), 80, 80)
+        self.reveal(page, rect)
         self.viewport().update()
 
     # ----- souris : sélection de texte, outils d'annotation --------------------------------
@@ -818,6 +823,7 @@ class InlineEditor(QPlainTextEdit):
         super().__init__(view.viewport())
         self.view, self.page, self.rect_pt, self.on_commit = view, page, rect, on_commit
         self.wrap, self.done = wrap, False
+        self.on_tab, self.enter_commits = None, False  # formulaires (voir edit_inline)
         self.setFrameShape(QFrame.Shape.NoFrame)
         self.setFont(font)
         self.setLineWrapMode(QPlainTextEdit.LineWrapMode.WidgetWidth if wrap
@@ -874,10 +880,15 @@ class InlineEditor(QPlainTextEdit):
         return super().event(event)
 
     def keyPressEvent(self, event) -> None:
-        if event.key() == Qt.Key.Key_Escape:
+        key = event.key()
+        if key == Qt.Key.Key_Escape:
             self.cancel()
-        elif (event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter)
-              and event.modifiers() & Qt.KeyboardModifier.ControlModifier):
+        elif key in (Qt.Key.Key_Tab, Qt.Key.Key_Backtab) and self.on_tab:
+            on_tab = self.on_tab
+            self.commit()
+            on_tab(key == Qt.Key.Key_Backtab)
+        elif key in (Qt.Key.Key_Return, Qt.Key.Key_Enter) and (
+                self.enter_commits or event.modifiers() & Qt.KeyboardModifier.ControlModifier):
             self.commit()
         else:
             super().keyPressEvent(event)
