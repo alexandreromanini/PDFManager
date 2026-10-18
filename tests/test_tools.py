@@ -188,7 +188,7 @@ def test_repair_falls_back_to_qpdf(tmp_path, monkeypatch):
     doc = PdfDocument(path)
     assert doc.repaired and doc.page_count == 3
     (tmp_path / "rien.pdf").write_bytes(b"pas un pdf")
-    with pytest.raises(PdfError, match="illisible"):
+    with pytest.raises(PdfError, match="pas un PDF valide"):
         PdfDocument(tmp_path / "rien.pdf")
 
 
