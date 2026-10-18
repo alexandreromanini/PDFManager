@@ -37,6 +37,7 @@ SIGNED_WARNING = ("\n\nCe document est signé : l'enregistrement réécrira enti
                   "resterait lisible dans la version signée, conservée dans le fichier).")
 
 
+SAFE_SCHEMES = {"http", "https", "mailto"}  # liens du PDF ouverts (après confirmation)
 SANS = ["Helvetica", "Arial", "Liberation Sans", "DejaVu Sans"]
 
 
@@ -325,6 +326,11 @@ class Editor(QObject):
     def follow(self, tab, link: E.LinkInfo) -> None:
         if link.page is not None:
             tab.view.go_to_page(link.page)
+        elif link.uri and QUrl(link.uri).scheme().lower() not in SAFE_SCHEMES:
+            # file:, protocoles d'applications… : un PDF piégé pourrait lancer un programme.
+            QMessageBox.warning(self.window, "Lien non ouvert",
+                                f"Ce lien n'est pas une adresse web ni une adresse e-mail : "
+                                f"PDFManager ne l'ouvre pas, par sécurité.\n\n{link.uri}")
         elif link.uri and QMessageBox.question(  # un lien peut mener n'importe où
                 self.window, "Ouvrir le lien", f"Ouvrir {link.uri} ?"
         ) == QMessageBox.StandardButton.Yes:
