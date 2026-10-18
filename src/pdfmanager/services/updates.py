@@ -19,6 +19,7 @@ from pdfmanager.core.document import Cancelled
 
 REPO = "alexandreromanini/PDFManager"
 API = f"https://api.github.com/repos/{REPO}/releases/latest"
+DOWNLOADS = f"https://github.com/{REPO}/releases/download/"
 FOLDER = Path(tempfile.gettempdir()) / "PDFManager-update"
 CHUNK = 256 * 1024
 
@@ -53,7 +54,9 @@ def latest(timeout: float = 10) -> Release | None:
             return None
         raise
     for asset in data.get("assets", []):
-        if asset["name"].lower().endswith("-setup.exe"):
+        # seul un installeur publié sur ce dépôt, en https, est accepté
+        if asset["name"].lower().endswith("-setup.exe") and asset[
+                "browser_download_url"].startswith(DOWNLOADS):
             digest = asset.get("digest") or ""
             return Release(data["tag_name"].lstrip("v"), data.get("body") or "",
                            asset["browser_download_url"], asset["size"],

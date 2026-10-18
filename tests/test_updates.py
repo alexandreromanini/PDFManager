@@ -31,10 +31,14 @@ def test_latest_reads_installer_asset(monkeypatch):
     payload = {"tag_name": "v0.9.1", "body": "Nouveautés", "assets": [
         {"name": "notes.txt", "size": 1, "browser_download_url": "x"},
         {"name": "PDFManager-0.9.1-setup.exe", "size": 42,
-         "browser_download_url": "https://example/setup.exe", "digest": "sha256:ab12"}]}
+         "browser_download_url": updates.DOWNLOADS + "v0.9.1/s-setup.exe",
+         "digest": "sha256:ab12"}]}
     monkeypatch.setattr(updates, "_get", lambda url, t: io.BytesIO(json.dumps(payload).encode()))
     assert updates.latest() == updates.Release("0.9.1", "Nouveautés",
-                                               "https://example/setup.exe", 42, "ab12")
+                                               updates.DOWNLOADS + "v0.9.1/s-setup.exe", 42,
+                                               "ab12")
+    payload["assets"][1]["browser_download_url"] = "http://ailleurs.example/setup.exe"
+    assert updates.latest() is None  # adresse hors du dépôt, ou sans https : refusée
 
 
 def test_download_checks_size_and_digest(monkeypatch, tmp_path):
