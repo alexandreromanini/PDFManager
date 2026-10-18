@@ -2,7 +2,74 @@
 
 ## Résumé
 
-_Rempli en fin d'audit : voir la section « Bilan » plus bas._
+**32 issues** trouvées, **25 corrigées** et re-testées, **2 non corrigées** (raison donnée),
+**5 en attente de votre décision**. Aucune issue critique (🔴) : aucun scénario n'a corrompu
+ou perdu un document (742 actions automatiques, annuler / rétablir vérifiés à chaque fois).
+
+| Sévérité | Trouvées | Corrigées | Non corrigées | En attente |
+|---|---|---|---|---|
+| 🔴 Critique | 0 | - | - | - |
+| 🟠 Majeur | 6 | 6 | 0 | 0 |
+| 🟡 Mineur | 12 | 12 | 0 | 0 |
+| 🔵 Amélioration | 14 | 7 | 2 | 5 |
+| **Total** | **32** | **25** | **2** | **5** |
+
+| Catégorie | Nombre | Corrigées |
+|---|---|---|
+| Bug | 8 | 8 |
+| UX | 9 | 7 (2 en attente) |
+| Accessibilité | 3 | 3 |
+| Design | 3 | 2 (1 en attente) |
+| Sécurité | 2 | 2 |
+| Doublon | 2 | 1 (1 en attente) |
+| Performance | 2 | 1 (1 non corrigée) |
+| Code | 2 | 1 (1 non corrigée) |
+| Inutile | 1 | 0 (en attente) |
+
+**Après corrections** : pilote relancé sur les mêmes 9 PDF (651 actions) : **0 exception,
+0 erreur journalisée, 0 document corrompu, 0 échec d'annulation**. Tests : 174 → **192**
+(18 tests de non-régression ajoutés), ruff sans remarque.
+
+### Top 5 des problèmes les plus importants (tous corrigés)
+
+1. **B4 - Écritures non gérées** : dossier protégé, disque plein ou clé retirée pendant une
+   compression, un PDF/A, un export texte… → « Erreur inattendue », et le résultat d'un long
+   calcul perdu. Désormais : message clair, le calcul n'est pas perdu (choisir un autre dossier).
+2. **B1 - Erreur en fermant un onglet** : selon l'ordre des onglets, « Erreur inattendue » à la
+   fermeture du document courant.
+3. **A1 - Focus clavier invisible** : impossible de savoir où l'on est en naviguant au clavier
+   dans les panneaux, l'accueil et les tuiles.
+4. **B3 - « Nettoyer le document » impossible sur un PDF signé** (« cannot find object in
+   xref »).
+5. **M9 - Liens dangereux** : un lien `file://` ou vers un protocole d'application dans un PDF
+   piégé pouvait être ouvert d'un clic sur « Oui » ; désormais seuls http(s) et mailto.
+
+### Décisions qui vous attendent
+
+| ID | Sujet | Recommandation | Alternatives |
+|---|---|---|---|
+| D1 | « Propriétés du document » rangé dans le panneau **Protéger** | **Le retirer** du panneau Protéger (il reste dans Fichier et Ctrl+D) | Le garder ; ou le déplacer dans un panneau « Document » |
+| D2 | **Outils > Réparer un PDF endommagé** fait la même chose qu'Ouvrir | **Supprimer l'entrée** : la réparation est automatique et signalée à l'ouverture | La garder pour la découvrabilité (c'est un argument : les gens cherchent « réparer ») |
+| D3 | **Remplir un champ** ouvre une fenêtre | **Saisie directement dans le champ** (comme Acrobat), Tab pour passer au suivant | Garder la fenêtre (plus simple, fonctionne déjà) |
+| D4 | **Panneau d'outils** fixe (272 px) | **Bouton pour le replier** en colonne d'icônes, mémorisé | Le masquer entièrement (F4 est déjà pris par le rail) ; ne rien changer |
+| D5 | **Plusieurs fenêtres** quand on ouvre des PDF depuis l'Explorateur | **Instance unique** : les PDF s'ouvrent en onglets dans la fenêtre existante | Garder plusieurs fenêtres (indépendantes, mais réglages et récents en concurrence) |
+
+### Recommandations stratégiques
+
+1. **Signer l'exécutable et l'installeur** (certificat de signature de code, ex. Azure
+   Trusted Signing, ~10 €/mois) : fin de l'avertissement SmartScreen à chaque installation et
+   chaîne de confiance pour les mises à jour automatiques (aujourd'hui garanties par HTTPS et
+   l'empreinte publiée par GitHub seulement).
+2. **Faire du pilote d'audit un test de CI** : une version rapide (toutes les actions sur un
+   PDF, dialogues simulés) aurait attrapé B1, B2 et B3 avant la mise en ligne. C'est le filet
+   le plus rentable pour une application qui a 100 actions.
+3. **Session et instance unique** (D5) : rouvrir les onglets de la dernière session, un seul
+   processus. C'est ce qui rend un lecteur PDF « par défaut » agréable au quotidien.
+4. **Clavier de bout en bout** : sélection de texte au clavier, Ctrl+A, raccourcis pour les
+   outils courants (surligner, ajouter du texte), Tab entre champs de formulaire (D3).
+5. **Assistant IA** : accélération par la carte graphique (llama.cpp Vulkan, sans CUDA) en
+   option, et recherche des extraits par sens (petit modèle de plongements) au lieu des mots
+   exacts ; proposer l'OCR automatiquement quand le document est un scan.
 
 ## Méthode
 
@@ -133,7 +200,3 @@ Sévérité : 🔴 Critique · 🟠 Majeur · 🟡 Mineur · 🔵 Amélioration.
 | D3 | 🔵 | UX | `ui/forms.py` | **Remplir un champ ouvre une fenêtre** au lieu d'écrire dans le champ comme Acrobat (l'éditeur sur place existe déjà pour le texte). | Clic dans un champ texte. | Saisie directement dans le champ. | En attente de validation |
 | D4 | 🔵 | Design | coque | **Panneau d'outils non repliable** (272 px fixes) : à 1024 px de large, il reste ~470 px pour le document. | Fenêtre à 1024×700. | Bouton pour replier le panneau. | En attente de validation |
 | D5 | 🔵 | UX | `app.py` | **Plusieurs instances** : ouvrir un PDF depuis l'Explorateur alors que PDFManager tourne ouvre une 2e fenêtre. | Double-clic sur 2 PDF associés. | Instance unique : le PDF s'ouvre dans un onglet de la fenêtre existante. | En attente de validation |
-
-## Bilan
-
-_À compléter en fin de corrections._

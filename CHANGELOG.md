@@ -2,6 +2,47 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [0.10.1] - 2026-10-18
+
+Audit complet de l'application : voir [AUDIT.md](AUDIT.md) (32 issues, 25 corrigées).
+
+### Corrigé
+- « Erreur inattendue » en fermant l'onglet courant (selon l'ordre des onglets).
+- Comparer une 2e fois après avoir fermé la fenêtre de comparaison.
+- « Nettoyer le document » impossible sur un PDF signé (« cannot find object in xref »).
+- Écriture impossible (dossier protégé, disque plein) pendant une compression, un PDF/A, un
+  export texte, une création depuis des images : message clair au lieu d'« Erreur
+  inattendue », et le résultat calculé n'est pas perdu. Messages d'erreur sans code système
+  ni nom de fichier temporaire.
+- La présentation plein écran se ferme avec son onglet et avec la fenêtre (l'application ne
+  reste plus lancée en arrière-plan).
+- Menu Commentaires : seuls les outils de commentaire (il listait aussi Recadrer, Placer
+  l'image, les champs de formulaire…).
+- Case « Panneau latéral » synchronisée quand un outil rouvre le rail.
+- Fichiers récents supprimés retirés du menu.
+- Supprimer toutes les pages : refusé avant la question de confirmation.
+- Extension .pdf ajoutée si absente (Extraire, Fusionner, Signer).
+- Panneaux d'outils défilants sur les petites fenêtres ; libellés trop longs abrégés avec
+  info-bulle (ils étaient coupés).
+- Nom de fichier avec « < » mal affiché dans la comparaison.
+
+### Sécurité
+- Les liens d'un PDF ne s'ouvrent plus que s'ils mènent à une page web (http, https) ou à une
+  adresse e-mail : un lien `file://` ou vers un programme est refusé, avec explication.
+- Mises à jour : seul un installeur publié sur ce dépôt, en https, est accepté.
+
+### Accessibilité
+- Focus clavier visible sur les boutons, lignes, cartes et tuiles (au clavier seulement).
+- Contrastes WCAG AA : tuiles sélectionnées et textes indicatifs plus foncés.
+- Onglets du rail nommés pour les lecteurs d'écran.
+
+### Modifié
+- « Enregistrer » n'est actif que s'il y a des modifications (ou un fichier réparé à garder).
+- Fusion : noms des fichiers lisibles, chemin en info-bulle.
+- Déposer un fichier non PDF sur la fenêtre explique ce qui est accepté.
+- Recherche : flèches précédent / suivant dans le champ.
+- Mémoire des rendus partagée entre les onglets (400 Mo au total au lieu de 300 Mo chacun).
+
 ## [0.10.0] - 2026-10-18
 
 ### Ajouté
