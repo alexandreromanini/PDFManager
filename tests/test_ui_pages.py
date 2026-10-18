@@ -176,3 +176,11 @@ def test_extract_adds_pdf_extension(qtbot, win, sample_pdf, tmp_path, monkeypatc
                         lambda *a, **k: (str(tmp_path / "pages"), ""))
     win.organizer.extract(tab)
     assert (tmp_path / "pages.pdf").exists() and not (tmp_path / "pages").exists()
+
+
+def test_merge_dialog_shows_names_keeps_paths(qtbot, win, sample_pdf):
+    dlg = organize.MergeDialog(win, [sample_pdf])
+    qtbot.addWidget(dlg)
+    item = dlg.list.item(0)
+    assert item.text().startswith(sample_pdf.name) and item.toolTip() == str(sample_pdf)
+    assert dlg.paths() == [sample_pdf]
