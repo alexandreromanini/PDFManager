@@ -3,7 +3,7 @@ import time
 import pymupdf
 import pytest
 from conftest import make_pdf
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QEvent, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -132,6 +132,12 @@ def test_compare_window(qtbot, win, tmp_path, monkeypatch):
     assert w.list.count() == 1 and "Clause ajoutée" in w.list.item(0).toolTip()
     w.list.setCurrentRow(0)
     assert w.new_view.current_hit[0] == 1
+
+    w.close()  # détruite (WA_DeleteOnClose) : une 2e comparaison ne doit pas planter
+    QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    win.tools.compare(tab)
+    assert len(win.tools.windows) == 1
+    qtbot.addWidget(win.tools.windows[0])
 
 
 def test_exports_and_create_from_images(qtbot, win, sample_pdf, tmp_path, monkeypatch):

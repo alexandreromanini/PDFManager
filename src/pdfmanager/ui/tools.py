@@ -6,6 +6,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
+import shiboken6
 from PySide6.QtCore import QObject, QUrl
 from PySide6.QtGui import QAction, QDesktopServices, QKeySequence
 from PySide6.QtWidgets import (
@@ -364,7 +365,8 @@ class Tools(QObject):
         changes = self._run("Comparaison…", work)
         if changes is not None:
             w = ComparisonWindow(tab.doc, other, changes)
-            self.windows = [x for x in self.windows if x.isVisible()] + [w]
+            # Une fenêtre fermée est détruite (WA_DeleteOnClose) : ne garder que les vivantes.
+            self.windows = [x for x in self.windows if shiboken6.isValid(x)] + [w]
             w.show()
 
     def pdfa(self, tab) -> None:
