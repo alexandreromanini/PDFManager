@@ -44,6 +44,7 @@ from pdfmanager.ui.shell import Shell
 from pdfmanager.ui.sidebar import Sidebar
 from pdfmanager.ui.sign import Signer
 from pdfmanager.ui.tools import Tools
+from pdfmanager.ui.updates import Updater
 from pdfmanager.ui.viewer import FitMode, PdfView, PresentationView, ViewMode, to_qimage
 from pdfmanager.ui.workers import Task
 
@@ -181,6 +182,7 @@ class MainWindow(QMainWindow):
         self.forms = FormFiller(self)
         self.signer = Signer(self)
         self.tools = Tools(self)
+        self.updater = Updater(self)
         self._build_ui()
         self.shell = Shell(self)
         self.setCentralWidget(self.shell.root)
@@ -320,6 +322,7 @@ class MainWindow(QMainWindow):
         m = bar.addMenu("&Aide")
         m.addAction("Ouvrir le dossier des journaux", self.open_log_dir)
         m.addAction("Outils externes détectés…", self.tools.external_tools)
+        m.addAction("Rechercher les mises à jour…", self.updater.check_now)
         m.addAction("À propos", lambda: QMessageBox.about(
             self, "À propos", f"PDFManager {__version__}\nUsage personnel - PySide6, PyMuPDF, "
             "pyHanko, pikepdf, pdf2docx\nIcônes : Lucide (licence ISC)"))

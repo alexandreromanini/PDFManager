@@ -49,3 +49,5 @@ Root: HKA; Subkey: "Software\Classes\PDFManager.Document\shell\open\command"; Va
 
 [Run]
 Filename: "{app}\PDFManager.exe"; Description: "{cm:LaunchProgram,PDFManager}"; Flags: nowait postinstall skipifsilent
+; Mise a jour lancee depuis l'application (installation silencieuse) : relance
+Filename: "{app}\PDFManager.exe"; Flags: nowait postinstall skipifnotsilent

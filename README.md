@@ -16,7 +16,8 @@ Usage strictement personnel (PyMuPDF est sous AGPL).
 | 5 | Formulaires, signatures | ✅ 0.5.0 |
 | 6 | OCR, compression, conversions, PDF/A | ✅ 0.6.1 |
 | 7 | Refonte visuelle (Windows 11, panneau d'outils, accueil) | ✅ 0.7.0 |
-| 7b | Logo, modifier / ajouter du texte sur la page | ✅ 0.8.1 |
+| 7b | Logo, modifier / ajouter du texte sur la page | ✅ 0.8.3 |
+| - | Mises à jour depuis l'application | ✅ 0.9.0 |
 
 ## Développement (Linux)
 
@@ -33,6 +34,19 @@ python3.12 -m venv .venv
 **Via GitHub Actions (recommandé)** : chaque push sur `main` lance `.github/workflows/build-windows.yml`
 (tests sous Windows → PyInstaller → autotest de l'exe → Inno Setup). Récupérer
 `PDFManager-setup` dans *Actions → dernier run → Artifacts*.
+
+**Publier une version** (mise à jour proposée dans l'application) : monter `__version__`
+(`src/pdfmanager/__init__.py`), décrire la version dans `CHANGELOG.md`, puis pousser un tag :
+
+```bash
+git tag v0.9.0 && git push origin v0.9.0
+```
+
+La CI construit l'installeur et le publie dans une *Release* GitHub, avec la section du
+CHANGELOG pour notes. Les applications installées la voient au démarrage (ou *menu ⋯ → Aide →
+Rechercher les mises à jour*) : « Installer maintenant » télécharge l'installeur (taille et
+empreinte SHA-256 vérifiées), propose d'enregistrer les documents modifiés, ferme
+l'application, installe sans assistant puis relance PDFManager.
 
 **En local sous Windows** : installer Python 3.12 et [Inno Setup 6](https://jrsoftware.org/isdl.php), puis :
 
@@ -308,7 +322,7 @@ src/pdfmanager/
              annotations, pages, édition, formulaires, signatures, OCR, sécurité,
              optimisation, conversions, comparaison)
   services/  processus de calcul (OCR, compression, Word), programmes externes
-             (Ghostscript, LibreOffice), tâches longues complètes
+             (Ghostscript, LibreOffice), tâches longues complètes, mises à jour
   resources/ modèles Tesseract fra + eng (tessdata_fast 4.1.0, Apache-2.0),
              icônes Lucide 0.460.0 (ISC, voir icons/LICENSE.txt)
   ui/        widgets Qt : coque (shell : barre d'application, panneau d'outils, accueil),
