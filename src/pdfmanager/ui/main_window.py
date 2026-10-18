@@ -46,7 +46,14 @@ from pdfmanager.ui.sidebar import Sidebar
 from pdfmanager.ui.sign import Signer
 from pdfmanager.ui.tools import Tools
 from pdfmanager.ui.updates import Updater
-from pdfmanager.ui.viewer import FitMode, PdfView, PresentationView, ViewMode, to_qimage
+from pdfmanager.ui.viewer import (
+    COMMENT_TOOLS,
+    FitMode,
+    PdfView,
+    PresentationView,
+    ViewMode,
+    to_qimage,
+)
 from pdfmanager.ui.workers import Task
 
 log = logging.getLogger(__name__)
@@ -322,8 +329,8 @@ class MainWindow(QMainWindow):
         bar.addMenu(self.tools.menu)
 
         m = bar.addMenu("&Commentaires")
-        for tool_action in self.annotator.actions.values():
-            m.addAction(tool_action)
+        for tool in COMMENT_TOOLS:  # les autres outils ont leur menu (Pages, Modifier…)
+            m.addAction(self.annotator.actions[tool])
         m.addSeparator()
         m.addAction(self.act_delete)
         m.addAction("Nom de l'auteur…", self.annotator.ask_author)

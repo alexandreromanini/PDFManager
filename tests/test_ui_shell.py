@@ -133,3 +133,14 @@ def test_keyboard_focus_is_visible(qtbot):
     css = QApplication.instance().styleSheet()
     assert "QPushButton:focus" in css and "QToolButton:focus" in css
     assert Row("Outil", "house").focusPolicy() == Qt.FocusPolicy.TabFocus
+
+
+def test_comments_menu_lists_only_comment_tools(qtbot):
+    """Le menu Commentaires listait les 28 outils (Recadrer, Placer l'image, Champ texte…)."""
+    from pdfmanager.ui.viewer import COMMENT_TOOLS
+
+    w = MainWindow()
+    qtbot.addWidget(w)
+    menu = next(a.menu() for a in w.main_menu.actions() if a.text() == "&Commentaires")
+    tools = [a.data() for a in menu.actions() if isinstance(a.data(), Tool)]
+    assert tools == list(COMMENT_TOOLS)
