@@ -207,3 +207,13 @@ def test_added_text_color_and_size(qtbot, win, sample_pdf):
     assert editor.text_size.value() == 24 and editor.shown_color.name() == "#1e88e5"
     win.act_undo.trigger()
     assert A.text_box(tab.doc, 0, info.xref)[1] == 12
+
+
+def test_link_with_unsafe_scheme_is_not_opened(qtbot, win, sample_pdf, monkeypatch):
+    """Sécurité : un lien file:// (ou protocole d'application) n'est jamais ouvert."""
+    opened, warned = [], []
+    monkeypatch.setattr(QDesktopServices, "openUrl", lambda url: opened.append(url))
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a: warned.append(a[2]))
+    tab = win.open_path(sample_pdf)
+    win.editor.follow(tab, E.LinkInfo(pymupdf.Rect(), 0, None, "file:///C:/Windows/calc.exe"))
+    assert opened == [] and "par sécurité" in warned[0]
