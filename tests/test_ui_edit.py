@@ -180,3 +180,30 @@ def test_clean_dialog(qtbot, win, tmp_path, monkeypatch):
     tab = win.open_path(tmp_path / "meta.pdf")
     win.editor.clean(tab)
     assert not tab.doc.doc.metadata.get("author") and tab.doc.modified
+
+
+def test_added_text_color_and_size(qtbot, win, sample_pdf):
+    from PySide6.QtGui import QColor
+
+    tab = win.open_path(sample_pdf)
+    view, editor = tab.view, win.editor
+    editor.set_text_color(QColor("#e53935"))  # choisie avant l'outil : vaut pour l'ajout
+    win.annotator.set_tool(Tool.ADD_TEXT)
+    drag(qtbot, view, pymupdf.Point(100, 400), pymupdf.Point(300, 440))
+    view.inline.insertPlainText("Rouge")
+    click(qtbot, view, pymupdf.Point(400, 700))
+    [info] = typed(tab)
+    assert A.text_box(tab.doc, 0, info.xref)[2] == pytest.approx((0.898, 0.224, 0.208), abs=0.01)
+
+    editor.set_text_color(QColor("#1e88e5"))  # texte sélectionné : recoloré
+    assert A.text_box(tab.doc, 0, info.xref)[2] == pytest.approx((0.118, 0.533, 0.898), abs=0.01)
+    editor.text_size.setValue(13)
+    editor.text_size.setValue(24)  # deux clics sur la flèche : une seule étape
+    qtbot.waitUntil(lambda: A.text_box(tab.doc, 0, info.xref)[1] == 24)
+    assert typed(tab)[0].rect.width == pytest.approx(info.rect.width * 2, abs=4)
+    assert win.act_undo.text() == "Annuler « Taille du texte »"
+
+    view.select_annot(None)  # plus de sélection : le panneau montre les réglages suivants
+    assert editor.text_size.value() == 24 and editor.shown_color.name() == "#1e88e5"
+    win.act_undo.trigger()
+    assert A.text_box(tab.doc, 0, info.xref)[1] == 12
