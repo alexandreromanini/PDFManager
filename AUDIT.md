@@ -48,13 +48,13 @@ ou perdu un document (742 actions automatiques, annuler / rétablir vérifiés �
 
 Vos réponses : **D1 oui, D2 oui, D3 oui, D4 non, D5 oui**, appliquées en 0.10.2.
 
-| ID | Sujet | Recommandation | Alternatives |
+| ID | Sujet | Recommandation | Votre décision |
 |---|---|---|---|
-| D1 | « Propriétés du document » rangé dans le panneau **Protéger** | **Le retirer** du panneau Protéger (il reste dans Fichier et Ctrl+D) | Corrigé (validé) |
-| D2 | **Outils > Réparer un PDF endommagé** fait la même chose qu'Ouvrir | **Supprimer l'entrée** : la réparation est automatique et signalée à l'ouverture | Corrigé (validé) |
-| D3 | **Remplir un champ** ouvre une fenêtre | **Saisie directement dans le champ** (comme Acrobat), Tab pour passer au suivant | Corrigé (validé) |
-| D4 | **Panneau d'outils** fixe (272 px) | **Bouton pour le replier** en colonne d'icônes, mémorisé | Ne sera pas corrigé : écarté par décision |
-| D5 | **Plusieurs fenêtres** quand on ouvre des PDF depuis l'Explorateur | **Instance unique** : les PDF s'ouvrent en onglets dans la fenêtre existante | Corrigé (validé) |
+| D1 | « Propriétés du document » rangé dans le panneau **Protéger** | **Le retirer** du panneau Protéger (il reste dans Fichier et Ctrl+D) | **Oui** : appliqué (0.10.2) |
+| D2 | **Outils > Réparer un PDF endommagé** fait la même chose qu'Ouvrir | **Supprimer l'entrée** : la réparation est automatique et signalée à l'ouverture | **Oui** : appliqué (0.10.2) |
+| D3 | **Remplir un champ** ouvre une fenêtre | **Saisie directement dans le champ** (comme Acrobat), Tab pour passer au suivant | **Oui** : appliqué (0.10.2) |
+| D4 | **Panneau d'outils** fixe (272 px) | **Bouton pour le replier** en colonne d'icônes, mémorisé | **Non** : panneau inchangé |
+| D5 | **Plusieurs fenêtres** quand on ouvre des PDF depuis l'Explorateur | **Instance unique** : les PDF s'ouvrent en onglets dans la fenêtre existante | **Oui** : appliqué (0.10.2) |
 
 ### Recommandations stratégiques
 
@@ -197,8 +197,8 @@ Sévérité : 🔴 Critique · 🟠 Majeur · 🟡 Mineur · 🔵 Amélioration.
 | U2 | 🔵 | UX | `ui/organize.py:201` | La fusion affiche les **chemins complets**, rognés au début : on ne voit pas les noms. | Fusionner des PDF. | Nom du fichier, chemin en info-bulle. | Corrigé |
 | U3 | 🔵 | UX | `ui/main_window.py:707` | **Déposer un fichier non PDF** sur la fenêtre : rien ne se passe, aucun retour. | Déposer une image .png. | Message expliquant ce qui est accepté. | Corrigé |
 | U4 | 🔵 | UX | barre d'application | **Recherche** : ni compteur ni boutons précédent / suivant visibles (seulement F3 et un toast). | Rechercher un mot. | Compteur « 3 / 12 » et flèches à côté du champ. | Corrigé |
-| D1 | 🔵 | Doublon | panneau Protéger | « Propriétés du document » rangé dans **Protéger** (sans rapport ; déjà dans Fichier, Ctrl+D). | Panneau Protéger. | Le retirer de Protéger. | En attente de validation |
-| D2 | 🔵 | Inutile | Outils > Réparer | « **Réparer un PDF endommagé** » fait la même chose qu'Ouvrir (la réparation est automatique à l'ouverture, avec un message). | - | Supprimer l'entrée. | En attente de validation |
-| D3 | 🔵 | UX | `ui/forms.py` | **Remplir un champ ouvre une fenêtre** au lieu d'écrire dans le champ comme Acrobat (l'éditeur sur place existe déjà pour le texte). | Clic dans un champ texte. | Saisie directement dans le champ. | En attente de validation |
-| D4 | 🔵 | Design | coque | **Panneau d'outils non repliable** (272 px fixes) : à 1024 px de large, il reste ~470 px pour le document. | Fenêtre à 1024×700. | Bouton pour replier le panneau. | En attente de validation |
-| D5 | 🔵 | UX | `app.py` | **Plusieurs instances** : ouvrir un PDF depuis l'Explorateur alors que PDFManager tourne ouvre une 2e fenêtre. | Double-clic sur 2 PDF associés. | Instance unique : le PDF s'ouvre dans un onglet de la fenêtre existante. | En attente de validation |
+| D1 | 🔵 | Doublon | panneau Protéger | « Propriétés du document » rangé dans **Protéger** (sans rapport ; déjà dans Fichier, Ctrl+D). | Panneau Protéger. | Le retirer de Protéger. | Corrigé (validé) |
+| D2 | 🔵 | Inutile | Outils > Réparer | « **Réparer un PDF endommagé** » fait la même chose qu'Ouvrir (la réparation est automatique à l'ouverture, avec un message). | - | Supprimer l'entrée. | Corrigé (validé) |
+| D3 | 🔵 | UX | `ui/forms.py` | **Remplir un champ ouvre une fenêtre** au lieu d'écrire dans le champ comme Acrobat (l'éditeur sur place existe déjà pour le texte). | Clic dans un champ texte. | Saisie directement dans le champ. | Corrigé (validé) |
+| D4 | 🔵 | Design | coque | **Panneau d'outils non repliable** (272 px fixes) : à 1024 px de large, il reste ~470 px pour le document. | Fenêtre à 1024×700. | Bouton pour replier le panneau. | Ne sera pas corrigé : écarté par décision |
+| D5 | 🔵 | UX | `app.py` | **Plusieurs instances** : ouvrir un PDF depuis l'Explorateur alors que PDFManager tourne ouvre une 2e fenêtre. | Double-clic sur 2 PDF associés. | Instance unique : le PDF s'ouvre dans un onglet de la fenêtre existante. | Corrigé (validé) |
