@@ -2,8 +2,8 @@
 
 ## Résumé
 
-**32 issues** trouvées, **25 corrigées** et re-testées, **2 non corrigées** (raison donnée),
-**5 en attente de votre décision**. Aucune issue critique (🔴) : aucun scénario n'a corrompu
+**32 issues** trouvées : **29 corrigées** et re-testées (dont 4 décisions validées),
+**3 non corrigées** (2 pour raison technique, 1 écartée par décision : D4). Aucune issue critique (🔴) : aucun scénario n'a corrompu
 ou perdu un document (742 actions automatiques, annuler / rétablir vérifiés à chaque fois).
 
 | Sévérité | Trouvées | Corrigées | Non corrigées | En attente |
@@ -11,24 +11,24 @@ ou perdu un document (742 actions automatiques, annuler / rétablir vérifiés �
 | 🔴 Critique | 0 | - | - | - |
 | 🟠 Majeur | 6 | 6 | 0 | 0 |
 | 🟡 Mineur | 12 | 12 | 0 | 0 |
-| 🔵 Amélioration | 14 | 7 | 2 | 5 |
-| **Total** | **32** | **25** | **2** | **5** |
+| 🔵 Amélioration | 14 | 11 | 3 | 0 |
+| **Total** | **32** | **29** | **3** | **0** |
 
 | Catégorie | Nombre | Corrigées |
 |---|---|---|
 | Bug | 8 | 8 |
-| UX | 9 | 7 (2 en attente) |
+| UX | 9 | 9 |
 | Accessibilité | 3 | 3 |
-| Design | 3 | 2 (1 en attente) |
+| Design | 3 | 2 (D4 écarté) |
 | Sécurité | 2 | 2 |
-| Doublon | 2 | 1 (1 en attente) |
+| Doublon | 2 | 2 |
 | Performance | 2 | 1 (1 non corrigée) |
 | Code | 2 | 1 (1 non corrigée) |
-| Inutile | 1 | 0 (en attente) |
+| Inutile | 1 | 1 |
 
 **Après corrections** : pilote relancé sur les mêmes 9 PDF (651 actions) : **0 exception,
-0 erreur journalisée, 0 document corrompu, 0 échec d'annulation**. Tests : 174 → **192**
-(18 tests de non-régression ajoutés), ruff sans remarque.
+0 erreur journalisée, 0 document corrompu, 0 échec d'annulation**. Tests : 174 → **194**
+(20 tests de non-régression ajoutés), ruff sans remarque.
 
 ### Top 5 des problèmes les plus importants (tous corrigés)
 
@@ -44,7 +44,9 @@ ou perdu un document (742 actions automatiques, annuler / rétablir vérifiés �
 5. **M9 - Liens dangereux** : un lien `file://` ou vers un protocole d'application dans un PDF
    piégé pouvait être ouvert d'un clic sur « Oui » ; désormais seuls http(s) et mailto.
 
-### Décisions qui vous attendent
+### Décisions
+
+Vos réponses : **D1 oui, D2 oui, D3 oui, D4 non, D5 oui**, appliquées en 0.10.2.
 
 | ID | Sujet | Recommandation | Alternatives |
 |---|---|---|---|
@@ -52,7 +54,7 @@ ou perdu un document (742 actions automatiques, annuler / rétablir vérifiés �
 | D2 | **Outils > Réparer un PDF endommagé** fait la même chose qu'Ouvrir | **Supprimer l'entrée** : la réparation est automatique et signalée à l'ouverture | Corrigé (validé) |
 | D3 | **Remplir un champ** ouvre une fenêtre | **Saisie directement dans le champ** (comme Acrobat), Tab pour passer au suivant | Corrigé (validé) |
 | D4 | **Panneau d'outils** fixe (272 px) | **Bouton pour le replier** en colonne d'icônes, mémorisé | Ne sera pas corrigé : écarté par décision |
-| D5 | **Plusieurs fenêtres** quand on ouvre des PDF depuis l'Explorateur | **Instance unique** : les PDF s'ouvrent en onglets dans la fenêtre existante | Garder plusieurs fenêtres (indépendantes, mais réglages et récents en concurrence) |
+| D5 | **Plusieurs fenêtres** quand on ouvre des PDF depuis l'Explorateur | **Instance unique** : les PDF s'ouvrent en onglets dans la fenêtre existante | Corrigé (validé) |
 
 ### Recommandations stratégiques
 

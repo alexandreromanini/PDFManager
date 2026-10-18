@@ -19,7 +19,7 @@ Usage strictement personnel (PyMuPDF est sous AGPL).
 | 7b | Logo, modifier / ajouter du texte sur la page | ✅ 0.8.3 |
 | - | Mises à jour depuis l'application, nouveau logo | ✅ 0.9.2 |
 | 8 | Assistant IA hors ligne (résumé, questions) | ✅ 0.10.0 |
-| - | Audit complet ([AUDIT.md](AUDIT.md)) : 25 corrections | ✅ 0.10.1 |
+| - | Audit complet ([AUDIT.md](AUDIT.md)) : 25 corrections + 4 décisions | ✅ 0.10.2 |
 
 ## Développement (Linux)
 
@@ -296,7 +296,6 @@ d'apparence (/AP) : vérifié par un moteur de rendu indépendant (Ghostscript).
 - **Impression** rastérisée à 300 dpi maximum (fidèle, mais fichiers spoule plus lourds).
 - **Chemins longs** (> 260 caractères) gérés pour la lecture/écriture ; les boîtes de dialogue
   Windows elles-mêmes peuvent les refuser si `LongPathsEnabled` n'est pas activé.
-- Ouvrir un second PDF depuis l'Explorateur lance une seconde fenêtre (pas d'instance unique).
 - **OCR** : français et anglais seulement ; texte invisible écrit en Helvetica (alphabet
   latin : les autres caractères deviennent « ? ») ; qualité dépendante du scan (modèles
   *tessdata_fast*, rapides mais un peu moins précis que les modèles « best »). Pages déjà
