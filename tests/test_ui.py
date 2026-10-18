@@ -1,3 +1,5 @@
+import os
+
 from conftest import PASSWORD
 from PySide6.QtWidgets import QInputDialog
 
@@ -181,3 +183,25 @@ def test_drop_non_pdf_explains_and_search_arrows(qtbot, sample_pdf, tmp_path):
     assert win.current_tab().doc.path == sample_pdf
     assert "photo.png ignoré" in win.statusBar().currentMessage()
     assert {win.act_find_prev, win.act_find_next} <= set(win.search_edit.actions())
+
+
+def test_second_launch_opens_files_in_running_window(qtbot, sample_pdf, tmp_path):
+    """Instance unique : un 2e lancement confie ses PDF à la fenêtre ouverte (onglets)."""
+    import threading
+
+    from conftest import make_pdf
+
+    from pdfmanager import app
+
+    win = _window(qtbot)
+    name = f"pdfm-test-{os.getpid()}"
+    assert not app.send_to_running([str(sample_pdf)], name)  # personne n'écoute encore
+    app.serve_instance(win, name)
+    other = make_pdf(tmp_path / "autre.pdf")
+    sent = []
+    worker = threading.Thread(target=lambda: sent.append(
+        app.send_to_running([str(sample_pdf), str(other)], name)))
+    worker.start()
+    qtbot.waitUntil(lambda: win.tabs.count() == 2, timeout=5000)
+    worker.join()
+    assert sent == [True] and win.current_tab().doc.path == other

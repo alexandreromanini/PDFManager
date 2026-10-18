@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import getpass
+import json
 import logging
 import multiprocessing
+import os
 import sys
 import tempfile
 from logging.handlers import RotatingFileHandler
@@ -111,6 +114,69 @@ def _selftest_tools(tab, folder: Path) -> None:
         raise RuntimeError("PDF/A accepté à tort")
 
 
+def instance_name() -> str:
+    """Nom du canal local de l'instance en cours, propre à l'utilisateur de la session."""
+    try:
+        user = getpass.getuser()
+    except Exception:  # pas de nom d'utilisateur résoluble
+        user = "utilisateur"
+    return f"PDFManager-{user}"
+
+
+def send_to_running(paths: list[str], name: str | None = None) -> bool:
+    """Une fenêtre PDFManager tourne déjà : lui confier les fichiers (nouveaux onglets).
+    False s'il n'y en a pas : ce processus devient l'instance."""
+    from PySide6.QtNetwork import QLocalSocket
+
+    sock = QLocalSocket()
+    sock.connectToServer(name or instance_name())
+    if not sock.waitForConnected(500):
+        return False
+    if os.name == "nt":  # la fenêtre existante a le droit de passer au premier plan
+        import ctypes
+
+        ctypes.windll.user32.AllowSetForegroundWindow(-1)  # ASFW_ANY
+    sock.write(json.dumps([str(Path(p).absolute()) for p in paths]).encode("utf-8"))
+    sock.waitForBytesWritten(2000)
+    sock.disconnectFromServer()
+    if sock.state() != QLocalSocket.LocalSocketState.UnconnectedState:
+        sock.waitForDisconnected(2000)
+    return True
+
+
+def serve_instance(win, name: str | None = None) -> None:
+    """Écoute les lancements suivants (double-clic sur un PDF dans l'Explorateur) : leurs
+    fichiers s'ouvrent ici, en onglets, et la fenêtre revient au premier plan."""
+    from PySide6.QtNetwork import QLocalServer
+
+    name = name or instance_name()
+    server = QLocalServer(win)
+    QLocalServer.removeServer(name)  # reste d'une instance plantée (Linux)
+    if not server.listen(name):
+        log.warning("Instance unique indisponible : %s", server.errorString())
+        return
+
+    def received(sock) -> None:
+        try:
+            paths = json.loads(bytes(sock.readAll()).decode("utf-8") or "[]")
+        except ValueError:
+            paths = []
+        sock.deleteLater()
+        if win.isMinimized():
+            win.showNormal()
+        win.raise_()
+        win.activateWindow()
+        for p in paths:
+            win.open_path(p)
+
+    def connected() -> None:
+        while (sock := server.nextPendingConnection()) is not None:
+            sock.disconnected.connect(lambda sock=sock: received(sock))
+
+    server.newConnection.connect(connected)
+    win.instance_server = server  # gardé en vie avec la fenêtre
+
+
 def _install_translations(app: QApplication) -> None:
     """Boutons et dialogues standard de Qt en français (« Enregistrer », « Annuler »…)."""
     path = QLibraryInfo.path(QLibraryInfo.LibraryPath.TranslationsPath)
@@ -158,6 +224,7 @@ def selftest(win) -> int:
             _selftest_signature(tab, Path(tmp))
             _selftest_tools(tab, Path(tmp))
             import llama_cpp  # moteur de l'assistant IA : ses DLL doivent se charger
+            from PySide6.QtNetwork import QLocalServer  # instance unique  # noqa: F401
 
             log.info("Moteur IA : %s", llama_cpp.llama_print_system_info().decode())
             tab.doc.undo()  # champ de signature : rien à enregistrer à la fermeture
@@ -185,12 +252,16 @@ def main() -> int:
     sys.excepthook = _excepthook
     log.info("Démarrage de PDFManager %s", __version__)
 
+    args = app.arguments()[1:]
+    if "--selftest" not in args and send_to_running(args):
+        log.info("Fichiers confiés à la fenêtre déjà ouverte : %s", args)
+        return 0
     from pdfmanager.ui.main_window import MainWindow
 
     win = MainWindow()
-    args = app.arguments()[1:]
     if "--selftest" in args:
         return selftest(win)
+    serve_instance(win)
     win.show()
     for arg in args:
         win.open_path(arg)

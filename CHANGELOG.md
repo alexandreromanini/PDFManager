@@ -2,6 +2,23 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [0.10.2] - 2026-10-18
+
+Décisions de l'audit ([AUDIT.md](AUDIT.md)).
+
+### Modifié
+- **Formulaires** : le texte se tape directement dans le champ, comme dans Acrobat (plus de
+  fenêtre) ; Entrée valide, Échap annule, Tab / Maj+Tab passent au champ suivant /
+  précédent, à la taille du texte du champ.
+- **Une seule fenêtre** : ouvrir un PDF depuis l'Explorateur alors que PDFManager est lancé
+  l'ajoute en onglet dans la fenêtre existante, qui revient au premier plan.
+- « Propriétés du document » n'apparaît plus dans le panneau Protéger (toujours dans Fichier,
+  Ctrl+D).
+
+### Retiré
+- Outils > « Réparer un PDF endommagé » : doublon d'Ouvrir, la réparation étant automatique
+  et signalée à l'ouverture (« Enregistrer » garde la version réparée).
+
 ## [0.10.1] - 2026-10-18
 
 Audit complet de l'application : voir [AUDIT.md](AUDIT.md) (32 issues, 25 corrigées).
