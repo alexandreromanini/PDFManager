@@ -2,6 +2,12 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [0.10.3] - 2026-10-18
+
+### Modifié
+- Panneau d'outils réordonné : Organiser, Modifier, Convertir et optimiser, Signer et
+  protéger, puis Assistant IA.
+
 ## [0.10.2] - 2026-10-18
 
 Décisions de l'audit ([AUDIT.md](AUDIT.md)).
