@@ -563,9 +563,23 @@ def clean(doc: PdfDocument, *, metadata: bool = True, javascript: bool = True,
           links: bool = False, forms: bool = False) -> None:
     """Supprime les informations cachées (cases de « Nettoyer le document »).
     hidden_text retire aussi une couche OCR invisible : désactivé par défaut."""
-    with doc.edit("Nettoyer le document") as d:
+    def scrub(d: pymupdf.Document) -> None:
         d.scrub(attached_files=attachments, embedded_files=attachments, javascript=javascript,
                 metadata=metadata, xml_metadata=metadata, thumbnails=thumbnails,
                 hidden_text=hidden_text, remove_links=links, reset_fields=forms,
                 reset_responses=False, redactions=False, clean_pages=True)
+
+    try:
+        with doc.edit("Nettoyer le document") as d:
+            scrub(d)
+    except RuntimeError:
+        # scrub() lit chaque objet du fichier et échoue sur un objet libéré (mise à jour
+        # incrémentale d'un document signé : « cannot find object in xref ») : on nettoie
+        # une copie réécrite, sans ces objets, qui remplace le document (un seul Ctrl+Z).
+        with pdf_lock:
+            copy = pymupdf.open("pdf", doc.doc.tobytes(encryption=pymupdf.PDF_ENCRYPT_KEEP))
+        if copy.needs_pass:
+            copy.authenticate(doc._password or "")
+        scrub(copy)
+        doc.swap("Nettoyer le document", copy.tobytes(encryption=pymupdf.PDF_ENCRYPT_KEEP))
     doc.incremental = False  # sinon l'ancienne version (métadonnées…) resterait en tête
