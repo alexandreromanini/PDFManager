@@ -203,7 +203,9 @@ class Sidebar(QTabWidget):
         self._add(self.assistant, "Assistant IA", "bot-message-square")
 
     def _add(self, widget, label: str, icon_name: str) -> None:
-        self.setTabToolTip(self.addTab(widget, icon(icon_name), ""), label)
+        i = self.addTab(widget, icon(icon_name), "")
+        self.setTabToolTip(i, label)
+        self.tabBar().setAccessibleTabName(i, label)  # icône seule : nom pour les lecteurs d'écran
 
     def refresh(self, structural: bool = False) -> None:
         if structural:
