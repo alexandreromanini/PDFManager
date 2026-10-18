@@ -600,7 +600,8 @@ class MainWindow(QMainWindow):
 
     def _fill_recent(self) -> None:
         self.recent_menu.clear()
-        recent = self.settings.value("recent", [], type=list)
+        # Fichiers déplacés ou supprimés depuis : masqués, comme sur l'accueil.
+        recent = [p for p in self.settings.value("recent", [], type=list) if Path(p).exists()]
         for p in recent:
             self.recent_menu.addAction(p, lambda p=p: self.open_path(p))
         if not recent:

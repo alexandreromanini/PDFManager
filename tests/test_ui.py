@@ -122,3 +122,17 @@ def test_presentation_closes_with_its_tab_and_window(qtbot, sample_pdf):
     shown = win._presentation
     win.close()
     assert not shown.isVisible()
+
+
+def test_recent_menu_hides_missing_files(qtbot, sample_pdf, tmp_path):
+    from conftest import make_pdf
+
+    win = _window(qtbot)
+    gone = make_pdf(tmp_path / "disparu.pdf")
+    for p in (sample_pdf, gone):
+        win.open_path(p)
+    win.close_tab(win.tabs.currentIndex())
+    gone.unlink()
+    win._fill_recent()
+    names = [a.text() for a in win.recent_menu.actions()]
+    assert str(sample_pdf) in names and not any("disparu" in n for n in names)
