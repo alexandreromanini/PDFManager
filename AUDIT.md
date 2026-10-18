@@ -48,7 +48,7 @@ ou perdu un document (742 actions automatiques, annuler / rétablir vérifiés �
 
 | ID | Sujet | Recommandation | Alternatives |
 |---|---|---|---|
-| D1 | « Propriétés du document » rangé dans le panneau **Protéger** | **Le retirer** du panneau Protéger (il reste dans Fichier et Ctrl+D) | Le garder ; ou le déplacer dans un panneau « Document » |
+| D1 | « Propriétés du document » rangé dans le panneau **Protéger** | **Le retirer** du panneau Protéger (il reste dans Fichier et Ctrl+D) | Corrigé (validé) |
 | D2 | **Outils > Réparer un PDF endommagé** fait la même chose qu'Ouvrir | **Supprimer l'entrée** : la réparation est automatique et signalée à l'ouverture | La garder pour la découvrabilité (c'est un argument : les gens cherchent « réparer ») |
 | D3 | **Remplir un champ** ouvre une fenêtre | **Saisie directement dans le champ** (comme Acrobat), Tab pour passer au suivant | Garder la fenêtre (plus simple, fonctionne déjà) |
 | D4 | **Panneau d'outils** fixe (272 px) | **Bouton pour le replier** en colonne d'icônes, mémorisé | Le masquer entièrement (F4 est déjà pris par le rail) ; ne rien changer |
