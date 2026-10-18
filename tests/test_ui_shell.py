@@ -177,3 +177,21 @@ def test_tool_panels_scroll_and_long_labels_elide(qtbot, sample_pdf):
     assert isinstance(page, QScrollArea) and page.verticalScrollBar().maximum() > 0
     long = next(r for r in page.findChildren(Row) if r.text_.startswith("En-tête"))
     assert long.caption.text().endswith("…") and long.toolTip() == long.text_
+
+
+def test_text_contrast_meets_wcag_aa():
+    """Accessibilité : textes du thème à 4,5:1 au moins sur leur fond (WCAG AA)."""
+    def lum(h):
+        r, g, b = (int(h[i:i + 2], 16) / 255 for i in (1, 3, 5))
+        f = lambda c: c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4  # noqa: E731
+        return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b)
+
+    def ratio(a, b):
+        hi, lo = sorted((lum(a), lum(b)), reverse=True)
+        return (hi + 0.05) / (lo + 0.05)
+
+    for t in (theme.LIGHT, theme.DARK):
+        for fg, bg in (("text", "window"), ("text2", "window"), ("text2", "layer"),
+                       ("accent_on_soft", "accent_soft"), ("placeholder", "control"),
+                       ("accent_text", "accent")):
+            assert ratio(t[fg], t[bg]) >= 4.5, (fg, bg, ratio(t[fg], t[bg]))
