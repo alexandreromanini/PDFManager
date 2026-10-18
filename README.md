@@ -17,7 +17,7 @@ Usage strictement personnel (PyMuPDF est sous AGPL).
 | 6 | OCR, compression, conversions, PDF/A | ✅ 0.6.1 |
 | 7 | Refonte visuelle (Windows 11, panneau d'outils, accueil) | ✅ 0.7.0 |
 | 7b | Logo, modifier / ajouter du texte sur la page | ✅ 0.8.3 |
-| - | Mises à jour depuis l'application | ✅ 0.9.1 |
+| - | Mises à jour depuis l'application, nouveau logo | ✅ 0.9.2 |
 
 ## Développement (Linux)
 
