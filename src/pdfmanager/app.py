@@ -157,6 +157,9 @@ def selftest(win) -> int:
                 raise RuntimeError("icônes absentes")
             _selftest_signature(tab, Path(tmp))
             _selftest_tools(tab, Path(tmp))
+            import llama_cpp  # moteur de l'assistant IA : ses DLL doivent se charger
+
+            log.info("Moteur IA : %s", llama_cpp.llama_print_system_info().decode())
             tab.doc.undo()  # champ de signature : rien à enregistrer à la fermeture
             win.close_tab(0)
     except Exception:

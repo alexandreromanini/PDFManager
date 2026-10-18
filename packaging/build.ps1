@@ -13,7 +13,10 @@ if (-not (Test-Path .venv)) {
 }
 $py = ".venv\Scripts\python.exe"
 & $py -m pip install --quiet --upgrade pip; Check "pip upgrade"
-& $py -m pip install --quiet -e ".[dev,build]"; Check "Installation des dependances"
+# llama-cpp-python : roue precompilee (CPU) de son depot, PyPI ne fournit que les sources
+& $py -m pip install --quiet --prefer-binary -e ".[dev,build]" `
+    --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+Check "Installation des dependances"
 
 if (-not $SkipTests) {
     & $py -m ruff check .; Check "ruff"

@@ -66,32 +66,37 @@ def is_newer(release: Release, current: str = __version__) -> bool:
     return parse_version(release.version) > parse_version(current)
 
 
-def download(task, release: Release, folder: Path = FOLDER) -> Path:
-    """L'installeur dans `folder` (versions précédentes effacées), taille et empreinte
-    vérifiées : un fichier tronqué ou altéré n'est jamais lancé."""
-    folder.mkdir(parents=True, exist_ok=True)
-    for old in folder.glob("*.exe*"):
-        old.unlink(missing_ok=True)
-    target = folder / f"PDFManager-{release.version}-setup.exe"
-    part = target.with_suffix(".exe.part")
+def fetch(task, url: str, size: int, sha256: str | None, target: Path, label: str) -> Path:
+    """Télécharge `url` vers `target` (via un fichier .part), taille et empreinte vérifiées :
+    un fichier tronqué ou altéré n'est jamais gardé."""
+    part = target.with_name(target.name + ".part")
     sha, done = hashlib.sha256(), 0
-    with _get(release.url, 30) as r, part.open("wb") as out:
+    with _get(url, 30) as r, part.open("wb") as out:
         while chunk := r.read(CHUNK):
             if task.cancelled:
                 break
             out.write(chunk)
             sha.update(chunk)
             done += len(chunk)
-            task.emit_partial((done // 1024, release.size // 1024 or 1,
-                               f"Téléchargement de la version {release.version}…"))
+            task.emit_partial((done // 1024 // 1024, size // 1024 // 1024 or 1, label))
     if task.cancelled:
         part.unlink(missing_ok=True)
         raise Cancelled
-    if done != release.size or (release.sha256 and sha.hexdigest() != release.sha256.lower()):
+    if done != size or (sha256 and sha.hexdigest() != sha256.lower()):
         part.unlink(missing_ok=True)
         raise OSError("Le fichier téléchargé est incomplet ou altéré ; réessayez plus tard.")
     part.replace(target)
     return target
+
+
+def download(task, release: Release, folder: Path = FOLDER) -> Path:
+    """L'installeur dans `folder` (versions précédentes effacées), vérifié."""
+    folder.mkdir(parents=True, exist_ok=True)
+    for old in folder.glob("*.exe*"):
+        old.unlink(missing_ok=True)
+    return fetch(task, release.url, release.size, release.sha256,
+                 folder / f"PDFManager-{release.version}-setup.exe",
+                 f"Téléchargement de la version {release.version}… (Mo)")
 
 
 def install(installer: Path) -> None:

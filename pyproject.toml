@@ -19,6 +19,10 @@ dependencies = [
     "pikepdf[pdfa]>=10.17",
     # PDF → Word (MIT) ; entraîne OpenCV et NumPy (~100 Mo dans l'installeur).
     "pdf2docx>=0.5.8",
+    # Assistant IA hors ligne (MIT) : llama.cpp. Roue Windows précompilée (CPU) sur
+    # https://abetlen.github.io/llama-cpp-python/whl/cpu (voir build.ps1) ; sous Linux,
+    # compilée à l'installation (cmake + compilateur C++).
+    "llama-cpp-python==0.3.19",
 ]
 
 [project.optional-dependencies]

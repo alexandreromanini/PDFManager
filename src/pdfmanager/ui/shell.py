@@ -402,6 +402,9 @@ class Shell(QObject):
     def _entries(self) -> list[tuple[str, list[Entry]]]:
         w = self.window
         return [
+            ("Assistant IA", [
+                Entry("assistant", "Résumer, poser des questions", "bot-message-square",
+                      run=lambda: self._sidebar("assistant"))]),
             ("Modifier", [
                 Entry("edit", "Modifier le texte et les images", "file-pen-line",
                       self._page_edit),
