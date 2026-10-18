@@ -175,15 +175,15 @@ def test_pdfa_from_menu(qtbot, win, sample_pdf, tmp_path, monkeypatch):
     assert win.current_tab().doc.path.name == "archive.pdf"
 
 
-def test_repair_reports_damage(qtbot, win, tmp_path, monkeypatch):
+def test_damaged_file_repaired_on_open(qtbot, win, tmp_path):
+    """La réparation se fait à l'ouverture (l'entrée « Réparer » faisait doublon) : message,
+    et « Enregistrer » actif pour garder la version réparée."""
     good = make_pdf(tmp_path / "ok.pdf").read_bytes()
     broken = tmp_path / "abîmé.pdf"
     broken.write_bytes(good[:good.rfind(b"xref")])
-    shown = []
-    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: shown.append(a[2]))
-    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(broken), ""))
-    win.tools.repair()
-    assert "endommagé" in shown[0] and win.current_tab().doc.page_count == 3
+    tab = win.open_path(broken)
+    assert tab.doc.repaired and tab.doc.page_count == 3
+    assert "endommagé" in win.statusBar().currentMessage() and win.act_save.isEnabled()
 
 
 def test_external_tools_report(qtbot, win, monkeypatch):

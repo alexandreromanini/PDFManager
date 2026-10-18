@@ -175,9 +175,8 @@ Depuis le panneau d'outils (groupe *Convertir et optimiser*) ou le menu ⋯ → 
   passe des permissions si le document a été ouvert avec celui d'ouverture.
 - **Comparer avec un autre PDF** : différences de texte, avant (rouge) / après (vert).
 - **Enregistrer en PDF/A (archivage)** : copie PDF/A-2b contrôlée avant écriture.
-- **Réparer un PDF endommagé** : ouvre et reconstruit le fichier ; « Enregistrer sous… »
-  pour garder la version réparée. Tout fichier endommagé est d'ailleurs réparé à l'ouverture
-  (message dans la barre d'état).
+- **Fichier endommagé** : réparé automatiquement à l'ouverture (un message le signale) ;
+  « Enregistrer » ou « Enregistrer sous… » garde la version réparée.
 - **Convertir** (ou menu ⋯ → Fichier → Exporter / Créer un PDF) : exporter en images
   (une par page), Word (.docx), texte (.txt, UTF-8) ; créer un PDF à partir d'images (une page A4 par image) ou de documents
   Office (PDF écrit à côté de chaque document, puis ouvert).
