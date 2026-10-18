@@ -1,4 +1,4 @@
-"""Menu « Outils » (OCR, réduction de taille, protection, comparaison, PDF/A, réparation),
+"""Menu « Outils » (OCR, réduction de taille, protection, comparaison, PDF/A),
 sous-menus « Exporter » et « Créer un PDF », propriétés du document, outils externes."""
 
 from __future__ import annotations
@@ -194,9 +194,6 @@ class Tools(QObject):
                                icon_name="columns-2")
         self.act_pdfa = act(self.menu, "Enregistrer en PDF/A (archivage)…", self.pdfa,
                             icon_name="archive")
-        self.menu.addSeparator()
-        self.act_repair = act(self.menu, "Réparer un PDF endommagé…", self.repair,
-                              needs_tab=False, icon_name="wrench")
 
         self.export_menu = QMenu("E&xporter", window)
         self.act_export_images = act(self.export_menu, "En images (PNG, JPEG)…",
@@ -399,23 +396,6 @@ class Tools(QObject):
         QMessageBox.information(self.window, "PDF/A",
                                 f"PDF/A-2b validé et enregistré : {target.name}{details}")
         self.window.open_path(target)
-
-    def repair(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self.window, "Réparer un PDF endommagé", "",
-                                              PDF_FILTER)
-        if not path:
-            return
-        tab = self.window.open_path(path)
-        if tab is None:
-            return
-        if tab.doc.repaired:
-            QMessageBox.information(
-                self.window, "Réparer", "Le fichier était endommagé ; il a été reconstruit en "
-                "mémoire.\nVérifiez les pages, puis « Enregistrer sous… » pour garder la "
-                "version réparée (l'original n'est pas modifié).")
-        else:
-            QMessageBox.information(self.window, "Réparer",
-                                    "Aucun dommage détecté dans ce fichier.")
 
     # ----- exporter ---------------------------------------------------------------------------
 
