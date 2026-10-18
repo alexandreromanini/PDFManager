@@ -20,6 +20,8 @@ LIGHT = {
     "hover": "rgba(0, 0, 0, 0.05)", "pressed": "rgba(0, 0, 0, 0.09)",
     "accent": "#D93A2B", "accent_hover": "#C2301F", "accent_text": "#FFFFFF",
     "accent_soft": "#FBE7E5", "canvas": "#EBEBEE", "icon": "#3A3A3A",
+    # textes : accent lisible sur accent_soft (5,5:1) et indications (4,9:1), WCAG AA
+    "accent_on_soft": "#B02A1C", "placeholder": "#707070",
     "scroll": "rgba(0, 0, 0, 0.28)", "toast": "#2B2B2B", "toast_text": "#FFFFFF",
 }
 DARK = {
@@ -29,6 +31,7 @@ DARK = {
     "hover": "rgba(255, 255, 255, 0.06)", "pressed": "rgba(255, 255, 255, 0.10)",
     "accent": "#FF6F61", "accent_hover": "#FF8A7E", "accent_text": "#1B1B1B",
     "accent_soft": "#4A2D2A", "canvas": "#1A1A1A", "icon": "#D6D6D6",
+    "accent_on_soft": "#FF8A7E", "placeholder": "#9A9A9A",
     "scroll": "rgba(255, 255, 255, 0.30)", "toast": "#F2F2F2", "toast_text": "#1B1B1B",
 }
 FONTS = ["Segoe UI Variable Text", "Segoe UI", "Noto Sans", "DejaVu Sans"]
@@ -52,7 +55,7 @@ def _palette(t: dict[str, str]) -> QPalette:
                       (R.AlternateBase, "layer_alt"), (R.Text, "text"), (R.Button, "control"),
                       (R.ButtonText, "text"), (R.Highlight, "accent"),
                       (R.HighlightedText, "accent_text"), (R.ToolTipBase, "layer"),
-                      (R.ToolTipText, "text"), (R.PlaceholderText, "text3"),
+                      (R.ToolTipText, "text"), (R.PlaceholderText, "placeholder"),
                       (R.Link, "accent"), (R.Mid, "border"), (R.Light, "layer"),
                       (R.Dark, "canvas")):  # Dark : fond derrière les pages (PdfView)
         p.setColor(role, QColor(t[key]))
@@ -112,13 +115,13 @@ QLabel#Toast {{ background: {t['toast']}; color: {t['toast_text']}; border-radiu
 QToolButton {{ border: none; border-radius: 6px; padding: 5px; background: transparent; }}
 QToolButton:hover {{ background: {t['hover']}; }}
 QToolButton:pressed {{ background: {t['pressed']}; }}
-QToolButton:checked {{ background: {t['accent_soft']}; color: {t['accent']}; }}
+QToolButton:checked {{ background: {t['accent_soft']}; color: {t['accent_on_soft']}; }}
 QToolButton:disabled {{ color: {t['text3']}; }}
 QToolButton#Tile {{ border: 1px solid {t['control_border']}; border-radius: 8px;
     background: {t['control']}; padding: 6px 2px; font-size: 8.5pt; }}
 QToolButton#Tile:hover {{ border-color: {t['border_strong']}; background: {t['layer_alt']}; }}
 QToolButton#Tile:checked {{ border: 1px solid {t['accent']}; background: {t['accent_soft']};
-    color: {t['accent']}; font-weight: 600; }}
+    color: {t['accent_on_soft']}; font-weight: 600; }}
 QToolButton#Tile:disabled {{ color: {t['text3']}; background: transparent; }}
 QToolButton#HomeButton {{ padding: 6px 12px; font-weight: 600; }}
 QToolButton#HomeButton:checked {{ background: {t['layer']}; color: {t['text']};
