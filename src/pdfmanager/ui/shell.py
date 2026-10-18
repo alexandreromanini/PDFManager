@@ -678,7 +678,7 @@ class Shell(QObject):
         w = self.window
         p = ToolPage(self, "Protéger", "lock")
         status = p.hint("")
-        p.rows([w.tools.act_protect, w.tools.act_unprotect, w.tools.act_properties])
+        p.rows([w.tools.act_protect, w.tools.act_unprotect])
         p.hint("Le mot de passe d'ouverture protège vraiment le contenu ; les restrictions "
                "(impression, copie…) dépendent du logiciel de lecture.")
 
