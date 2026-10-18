@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QListWidgetItem,
     QMenu,
     QMessageBox,
     QPushButton,
@@ -239,7 +240,10 @@ class MergeDialog(_Dialog):
         self.finish()
 
     def _add(self, path: Path) -> None:
-        self.list.addItem(str(path))
+        item = QListWidgetItem(f"{path.name}    ({path.parent.name})")  # le nom, lisible
+        item.setToolTip(str(path))
+        item.setData(Qt.ItemDataRole.UserRole, str(path))
+        self.list.addItem(item)
 
     def _browse(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(self, "Ajouter des PDF", "", PDF_FILTER)
@@ -261,7 +265,8 @@ class MergeDialog(_Dialog):
             raise ValueError("Ajoutez au moins deux fichiers.")
 
     def paths(self) -> list[Path]:
-        return [Path(self.list.item(i).text()) for i in range(self.list.count())]
+        return [Path(self.list.item(i).data(Qt.ItemDataRole.UserRole))
+                for i in range(self.list.count())]
 
 
 class SplitDialog(_Dialog):
