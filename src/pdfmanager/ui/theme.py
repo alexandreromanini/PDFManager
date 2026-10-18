@@ -148,6 +148,10 @@ QPushButton#Card {{ background: {t['layer']}; border: 1px solid {t['border']};
 QPushButton#Card:hover {{ border-color: {t['accent']}; background: {t['layer_alt']}; }}
 QPushButton#Recent {{ background: transparent; border: none; border-radius: 8px;
     padding: 0px; text-align: left; min-height: 52px; max-height: 52px; }}
+/* Focus clavier visible (accessibilité). Les boutons des panneaux ne prennent le focus
+   qu'au clavier (Tab) : le contour n'apparaît pas après un clic de souris. */
+QPushButton:focus, QToolButton:focus, QPushButton#Row:focus, QPushButton#Recent:focus,
+QPushButton#Card:focus, QToolButton#Tile:focus {{ border: 2px solid {t['accent']}; }}
 QPushButton#Recent:hover {{ background: {t['hover']}; }}
 
 QLineEdit, QAbstractSpinBox, QComboBox, QPlainTextEdit, QTextEdit {{

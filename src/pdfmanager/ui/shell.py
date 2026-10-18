@@ -114,6 +114,7 @@ class Row(QPushButton):
         self.caption = label(text)
         lay.addWidget(self.caption, 1)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setFocusPolicy(Qt.FocusPolicy.TabFocus)  # focus au clavier seulement
 
 
 @dataclass
@@ -389,6 +390,7 @@ class Shell(QObject):
         tool(w.act_print)
         save = QPushButton("Enregistrer")
         save.setObjectName("Primary")
+        save.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         save.setIcon(icon("save", "accent_text"))
         save.clicked.connect(lambda: w.act_save.trigger())
         w.act_save.changed.connect(lambda: save.setEnabled(w.act_save.isEnabled()))
@@ -579,7 +581,8 @@ class Shell(QObject):
             mark = "#FFFFFF" if QColor(hexa).lightness() < 170 else "#1B1B1B"
             b.setStyleSheet(f"QToolButton {{ background: {hexa}; border-radius: 13px; "
                             f"border: 1px solid {theme.current['border_strong']}; "
-                            f"color: {mark}; font-size: 15px; font-weight: bold; }}")
+                            f"color: {mark}; font-size: 15px; font-weight: bold; }}"
+                            f"QToolButton:focus {{ border: 2px solid {theme.current['accent']}; }}")
 
     def _page_forms(self) -> QWidget:
         p = ToolPage(self, "Formulaires", "text-cursor-input")
@@ -761,6 +764,7 @@ class HomePage(QObject):
         d.addLayout(text, 1)
         choose = QPushButton("Choisir des fichiers")
         choose.setObjectName("Primary")
+        choose.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         choose.setIcon(icon("folder-open", "accent_text"))
         choose.setMinimumHeight(40)
         choose.clicked.connect(w.open_dialog)
@@ -790,6 +794,7 @@ class HomePage(QObject):
         icon_name = "file-text" if key == "word" else self.shell.entry(key).icon
         card = QPushButton()
         card.setObjectName("Card")
+        card.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         card.setCursor(Qt.CursorShape.PointingHandCursor)
         card.setFixedHeight(140)  # un QPushButton ignore la taille de ses enfants
         card.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
@@ -830,6 +835,7 @@ class HomePage(QObject):
     def _recent_row(self, path: Path) -> QPushButton:
         row = QPushButton()
         row.setObjectName("Recent")
+        row.setFocusPolicy(Qt.FocusPolicy.TabFocus)
         row.setCursor(Qt.CursorShape.PointingHandCursor)
         row.setToolTip(str(path))
         h = QHBoxLayout(row)
