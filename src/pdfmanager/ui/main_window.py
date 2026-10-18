@@ -7,6 +7,7 @@ import logging
 from pathlib import Path
 
 import pymupdf
+import shiboken6
 from PySide6.QtCore import QRectF, QSettings, Qt, QThreadPool, QUrl, Signal
 from PySide6.QtGui import (
     QAction,
@@ -493,6 +494,7 @@ class MainWindow(QMainWindow):
         tab = self.tabs.widget(index)
         if not self._maybe_discard(tab):
             return False
+        self._close_presentation(tab.doc)
         self.tabs.removeTab(index)
         tab.deleteLater()  # les QThreadPool enfants attendent la fin des rendus en cours
         self._sync()
@@ -682,8 +684,18 @@ class MainWindow(QMainWindow):
 
     def start_presentation(self) -> None:
         if tab := self.current_tab():
+            self._close_presentation()
             self._presentation = PresentationView(tab.doc, tab.view.current_page)
             self._presentation.showFullScreen()
+
+    def _close_presentation(self, doc: PdfDocument | None = None) -> None:
+        """Ferme la présentation (celle de `doc` seulement, si donné) : elle ne doit survivre
+        ni à son onglet ni à la fenêtre (l'application continuerait de tourner)."""
+        p = self._presentation
+        if p is not None and shiboken6.isValid(p) and (doc is None or p.doc is doc):
+            p.close()
+        if p is not None and (doc is None or not shiboken6.isValid(p) or p.doc is doc):
+            self._presentation = None
 
     def apply_theme(self, name: str) -> None:
         theme.apply(name)
@@ -717,4 +729,5 @@ class MainWindow(QMainWindow):
                 event.ignore()
                 return
         self.settings.setValue("geometry", self.saveGeometry())
+        self._close_presentation()
         super().closeEvent(event)

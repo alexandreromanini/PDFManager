@@ -105,3 +105,20 @@ def test_sync_survives_tab_being_removed(qtbot, sample_pdf):
     win._sync()
     assert win.tabs.tabText(0) == sample_pdf.name
     win.tabs.removeTab(1)
+
+
+def test_presentation_closes_with_its_tab_and_window(qtbot, sample_pdf):
+    """Régression : la présentation plein écran survivait à la fenêtre (application encore
+    lancée) et à la fermeture de son onglet."""
+    win = _window(qtbot)
+    win.open_path(sample_pdf)
+    win.start_presentation()
+    shown = win._presentation
+    assert shown.isVisible()
+    win.close_tab(0)
+    assert win._presentation is None
+    win.open_path(sample_pdf)
+    win.start_presentation()
+    shown = win._presentation
+    win.close()
+    assert not shown.isVisible()
