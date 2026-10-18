@@ -166,3 +166,18 @@ def test_save_enabled_only_with_changes(qtbot, sample_pdf, monkeypatch):
     monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Save)
     assert win.save()
     assert not win.act_save.isEnabled()
+
+
+def test_drop_non_pdf_explains_and_search_arrows(qtbot, sample_pdf, tmp_path):
+    from PySide6.QtCore import QMimeData, QPointF, Qt, QUrl
+    from PySide6.QtGui import QDropEvent
+
+    win = _window(qtbot)
+    data = QMimeData()
+    data.setUrls([QUrl.fromLocalFile(str(tmp_path / "photo.png")),
+                  QUrl.fromLocalFile(str(sample_pdf))])
+    win.dropEvent(QDropEvent(QPointF(10, 10), Qt.DropAction.CopyAction, data,
+                             Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier))
+    assert win.current_tab().doc.path == sample_pdf
+    assert "photo.png ignoré" in win.statusBar().currentMessage()
+    assert {win.act_find_prev, win.act_find_next} <= set(win.search_edit.actions())

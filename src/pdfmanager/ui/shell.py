@@ -349,6 +349,9 @@ class Shell(QObject):
         add.clicked.connect(w.open_dialog)
         lay.addWidget(add)
         w.search_edit.addAction(icon("search", "text2"), QLineEdit.ActionPosition.LeadingPosition)
+        for action, name in ((w.act_find_prev, "chevron-up"), (w.act_find_next, "chevron-down")):
+            action.setIcon(icon(name))  # précédent / suivant visibles, pas seulement F3
+            w.search_edit.addAction(action, QLineEdit.ActionPosition.TrailingPosition)
         w.search_edit.setFixedWidth(300)
         lay.addWidget(w.search_edit)
         self.theme_button = QToolButton()

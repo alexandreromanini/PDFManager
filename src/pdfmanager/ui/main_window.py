@@ -732,13 +732,20 @@ class MainWindow(QMainWindow):
     # ----- événements ---------------------------------------------------------------------
 
     def dragEnterEvent(self, event) -> None:
-        if any(u.toLocalFile().lower().endswith(".pdf") for u in event.mimeData().urls()):
-            event.acceptProposedAction()
+        if any(u.isLocalFile() for u in event.mimeData().urls()):
+            event.acceptProposedAction()  # les autres fichiers sont expliqués au dépôt
 
     def dropEvent(self, event) -> None:
-        for url in event.mimeData().urls():
-            if url.toLocalFile().lower().endswith(".pdf"):
-                self.open_path(url.toLocalFile())
+        files = [Path(u.toLocalFile()) for u in event.mimeData().urls() if u.isLocalFile()]
+        others = [f.name for f in files if f.suffix.lower() != ".pdf"]
+        for f in files:
+            if f.suffix.lower() == ".pdf":
+                self.open_path(f)
+        if others:
+            self.statusBar().showMessage(
+                f"Seuls les PDF s'ouvrent ici ({', '.join(others[:3])} ignoré"
+                f"{'s' if len(others) > 1 else ''}). Images : « Créer un PDF » ou dépôt sur "
+                "les vignettes d'un document.", 8000)
 
     def closeEvent(self, event) -> None:
         for i in range(self.tabs.count()):
