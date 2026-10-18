@@ -1,11 +1,13 @@
-"""Barre et menu « Formulaires » : remplir les champs (clic avec l'outil Sélection), en
+"""Barre et menu « Formulaires » : remplir les champs (clic avec l'outil Sélection, saisie
+directement dans le champ), en
 créer (tracer le cadre), en supprimer (simple clic sur un champ avec l'outil de création)."""
 
 from __future__ import annotations
 
 import pymupdf
 from PySide6.QtCore import QObject
-from PySide6.QtWidgets import QInputDialog, QLineEdit, QMenu, QMessageBox
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import QInputDialog, QMenu, QMessageBox
 
 from pdfmanager.core import forms as F
 from pdfmanager.ui.viewer import FORM_TOOLS, Tool
@@ -66,6 +68,31 @@ class FormFiller(QObject):
                                 ) == QMessageBox.StandardButton.Yes:
             tab.apply(F.delete_field, field.page, field.xref)
 
+    def type_in(self, tab, field: F.FieldInfo) -> None:
+        """Saisie directement dans le champ, comme dans Acrobat : Entrée (ou un clic à côté)
+        valide, Échap annule, Tab / Maj+Tab passent au champ texte suivant / précédent."""
+        from pdfmanager.ui.edit import text_font
+
+        def commit(value: str, _rect) -> None:
+            if value != field.value:
+                tab.apply(F.set_value, field, value)
+
+        tab.view.edit_inline(
+            field.page, field.rect, field.value, text_font(field.text_size, tab.view.zoom),
+            QColor("black"), wrap=field.multiline, opaque=True, on_commit=commit,
+            on_tab=lambda back: self._next_text_field(tab, field, back),
+            enter_commits=not field.multiline)
+
+    def _next_text_field(self, tab, field: F.FieldInfo, backward: bool) -> None:
+        """Champ texte modifiable suivant (ordre du formulaire, toutes pages, en boucle)."""
+        order = [f for page in range(tab.doc.page_count) for f in F.fields(tab.doc, page)
+                 if f.kind == "text" and not f.readonly]
+        here = next((i for i, f in enumerate(order) if (f.page, f.xref) ==
+                     (field.page, field.xref)), None)
+        if here is None or len(order) < 2:  # seul champ : Tab valide, rien de plus
+            return
+        self.type_in(tab, order[(here + (-1 if backward else 1)) % len(order)])
+
     def fill(self, tab, field: F.FieldInfo) -> None:
         status = self.window.statusBar()
         if field.kind == "signature":
@@ -78,14 +105,7 @@ class FormFiller(QObject):
         elif field.kind in ("check", "radio"):
             tab.apply(F.set_value, field, not field.checked)
         elif field.kind == "text":
-            if field.multiline:
-                value, ok = QInputDialog.getMultiLineText(self.window, field.name, "Valeur :",
-                                                          field.value)
-            else:
-                value, ok = QInputDialog.getText(self.window, field.name, "Valeur :",
-                                                 QLineEdit.EchoMode.Normal, field.value)
-            if ok and value != field.value:
-                tab.apply(F.set_value, field, value)
+            self.type_in(tab, field)
         else:  # liste déroulante ou zone de liste
             items = list(field.choices)
             current = items.index(field.value) if field.value in items else 0

@@ -1,5 +1,6 @@
 import pymupdf
 import pytest
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QFileDialog, QInputDialog, QMessageBox
 from test_ui_annotations import _discard_all, drag
 from test_ui_edit import click
@@ -38,8 +39,11 @@ def test_create_fill_delete_fields(qtbot, win, sample_pdf, monkeypatch):
     assert by_name(tab.doc)["Case1"].rect.width == pytest.approx(14)
 
     win.annotator.set_tool(Tool.SELECT)
-    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("Martin", True))
-    click(qtbot, tab.view, pymupdf.Point(400, 210))
+    click(qtbot, tab.view, pymupdf.Point(400, 210))  # saisie directement dans le champ
+    assert tab.view.inline is not None and tab.view.inline.toPlainText() == ""
+    tab.view.inline.insertPlainText("Martin")
+    qtbot.keyClick(tab.view.inline, Qt.Key.Key_Return)  # champ d'une ligne : Entrée valide
+    assert tab.view.inline is None
     click(qtbot, tab.view, pymupdf.Point(305, 255))
     f = by_name(tab.doc)
     assert f["Texte1"].value == "Martin" and f["Case1"].checked
@@ -147,3 +151,23 @@ def test_wrong_password_keeps_dialog_open(qtbot, win, p12, monkeypatch):
     dlg.password.setText("faux")
     dlg.accept()
     assert dlg.result() != DigitalSignDialog.DialogCode.Accepted and "Mot de passe" in warned[0]
+
+
+def test_tab_moves_to_next_text_field(qtbot, win, sample_pdf, monkeypatch):
+    """Tab valide le champ et passe au suivant (en boucle), Maj+Tab au précédent ; Échap
+    abandonne la saisie en cours."""
+    tab = win.open_path(sample_pdf)
+    for k, y in enumerate((200, 240, 280)):
+        F.add_field(tab.doc, 0, pymupdf.Rect(300, y, 500, y + 20), "text", f"T{k}")
+    tab.changed()
+    click(qtbot, tab.view, pymupdf.Point(400, 210))
+    tab.view.inline.insertPlainText("un")
+    qtbot.keyClick(tab.view.inline, Qt.Key.Key_Tab)
+    tab.view.inline.insertPlainText("deux")
+    qtbot.keyClick(tab.view.inline, Qt.Key.Key_Tab)
+    qtbot.keyClick(tab.view.inline, Qt.Key.Key_Backtab)  # retour au 2e, déjà rempli
+    assert tab.view.inline.toPlainText() == "deux"
+    tab.view.inline.setPlainText("perdu")
+    qtbot.keyClick(tab.view.inline, Qt.Key.Key_Escape)
+    f = by_name(tab.doc)
+    assert (f["T0"].value, f["T1"].value, f["T2"].value) == ("un", "deux", "")

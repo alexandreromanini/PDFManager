@@ -614,8 +614,8 @@ class Shell(QObject):
         p = ToolPage(self, "Formulaires", "text-cursor-input")
         p.tiles(self._tool_tiles((Tool.SELECT, Tool.FIELD_TEXT, Tool.FIELD_CHECK,
                                   Tool.FIELD_COMBO, Tool.FIELD_SIGNATURE)))
-        p.hint("Remplir : cliquez dans les champs (surlignés en bleu) avec l'outil "
-               "Sélection.\nCréer : choisissez un type de champ, puis tracez son cadre sur "
+        p.hint("Remplir : cliquez dans un champ (surligné en bleu) avec l'outil Sélection et "
+               "écrivez directement ; Entrée valide, Tab passe au champ suivant.\nCréer : choisissez un type de champ, puis tracez son cadre sur "
                "la page. Un simple clic sur un champ existant propose de le supprimer.")
         return p.finish()
 

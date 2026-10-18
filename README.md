@@ -185,7 +185,9 @@ Depuis le panneau d'outils (groupe *Convertir et optimiser*) ou le menu ⋯ → 
 ### Formulaires
 
 Les champs apparaissent surlignés en bleu. Avec l'outil **Sélection**, un clic remplit le
-champ : saisie du texte, choix dans la liste, case cochée ou décochée. Ctrl+Z annule.
+champ : le texte se tape directement dans le champ (Entrée ou un clic à côté valide, Échap
+annule, Tab / Maj+Tab passent au champ texte suivant / précédent), choix dans la liste, case
+cochée ou décochée. Ctrl+Z annule.
 
 Panneau d'outils → **Formulaires** : **Champ texte**, **Case à cocher**, **Liste déroulante**
 (choix saisis un par ligne), **Champ de signature** : tracer le cadre (simple clic = taille
