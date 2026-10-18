@@ -502,8 +502,7 @@ class Shell(QObject):
 
     def _sidebar(self, attr: str) -> None:
         if tab := self.window.current_tab():
-            tab.sidebar.setVisible(True)
-            tab.sidebar.setCurrentWidget(getattr(tab.sidebar, attr))
+            self.window.show_sidebar(getattr(tab.sidebar, attr))
 
     # ----- panneaux propres aux outils -------------------------------------------------------
 

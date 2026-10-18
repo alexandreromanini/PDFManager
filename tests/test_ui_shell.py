@@ -144,3 +144,17 @@ def test_comments_menu_lists_only_comment_tools(qtbot):
     menu = next(a.menu() for a in w.main_menu.actions() if a.text() == "&Commentaires")
     tools = [a.data() for a in menu.actions() if isinstance(a.data(), Tool)]
     assert tools == list(COMMENT_TOOLS)
+
+
+def test_sidebar_checkbox_follows_tools(qtbot, sample_pdf):
+    """Rail masqué par F4 puis réaffiché par un outil : la case suit (un seul F4 suffit)."""
+    w = MainWindow()
+    qtbot.addWidget(w, before_close_func=_discard_all)
+    w.show()
+    tab = w.open_path(sample_pdf)
+    w.act_sidebar.trigger()
+    assert tab.sidebar.isHidden() and not w.act_sidebar.isChecked()
+    w.shell.open_entry(w.shell.entry("organize"))
+    assert not tab.sidebar.isHidden() and w.act_sidebar.isChecked()
+    w.act_sidebar.trigger()
+    assert tab.sidebar.isHidden()

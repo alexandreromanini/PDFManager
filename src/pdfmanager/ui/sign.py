@@ -505,8 +505,7 @@ class Signer(QObject):
 
     def field_clicked(self, tab, field: F.FieldInfo) -> None:
         if field.signed:
-            tab.sidebar.setVisible(True)
-            tab.sidebar.setCurrentWidget(tab.sidebar.signatures)
+            self.window.show_sidebar(tab.sidebar.signatures)
             self.verify(tab)
         else:
             self.window.annotator.set_tool(Tool.SELECT)
