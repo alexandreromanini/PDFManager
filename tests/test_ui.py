@@ -151,3 +151,18 @@ def test_render_cache_budget_is_shared_between_tabs():
             c.put((k, 1.0, 0, 0), img.copy())
     share = max(viewer.MIN_SHARE, 200 * 2**20 // len(viewer.ImageCache.live))
     assert all(c.size <= share + img.sizeInBytes() for c in caches)
+
+
+def test_save_enabled_only_with_changes(qtbot, sample_pdf, monkeypatch):
+    from PySide6.QtWidgets import QMessageBox
+
+    from pdfmanager.core import pages as P
+
+    win = _window(qtbot)
+    tab = win.open_path(sample_pdf)
+    assert not win.act_save.isEnabled()
+    tab.apply(P.rotate, [0], 90)
+    assert win.act_save.isEnabled()
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.StandardButton.Save)
+    assert win.save()
+    assert not win.act_save.isEnabled()
