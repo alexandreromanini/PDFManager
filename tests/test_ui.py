@@ -92,3 +92,15 @@ def test_selftest(qtbot):
     win = MainWindow()
     qtbot.addWidget(win)
     assert selftest(win) == 0
+
+
+def test_sync_survives_tab_being_removed(qtbot, sample_pdf):
+    """Fermeture de l'onglet courant : Qt peut signaler le changement d'onglet alors que la
+    page est déjà retirée (index sans document). Plus d'« Erreur inattendue »."""
+    from PySide6.QtWidgets import QWidget
+
+    win = _window(qtbot)
+    win.open_path(sample_pdf)
+    win.tabs.addTab(QWidget(), "en cours de retrait")
+    win._sync()
+    assert win.tabs.tabText(0) == sample_pdf.name

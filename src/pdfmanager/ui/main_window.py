@@ -385,8 +385,10 @@ class MainWindow(QMainWindow):
         for a in self.annotator.actions.values():
             a.setEnabled(tab is not None)
         for i in range(self.tabs.count()):
-            t = self.tabs.widget(i)
-            self.tabs.setTabText(i, t.doc.path.name + (" *" if t.doc.modified else ""))
+            # Pendant la fermeture de l'onglet courant, Qt signale le changement d'onglet
+            # alors que la page est déjà retirée : l'index ne désigne plus aucun document.
+            if isinstance(t := self.tabs.widget(i), DocumentTab):
+                self.tabs.setTabText(i, t.doc.path.name + (" *" if t.doc.modified else ""))
         undo, redo = (tab.doc.undo_label(), tab.doc.redo_label()) if tab else ("", "")
         self.act_undo.setEnabled(bool(undo))
         self.act_undo.setText(f"Annuler « {undo} »" if undo else "Annuler")
