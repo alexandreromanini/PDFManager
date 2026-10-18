@@ -8,10 +8,11 @@ import threading
 from pathlib import Path
 
 import pymupdf
-from PySide6.QtCore import QObject, QSettings, QUrl
+from PySide6.QtCore import QObject, QSettings, QTimer, QUrl, Signal
 from PySide6.QtGui import QAction, QColor, QDesktopServices, QFont
 from PySide6.QtWidgets import (
     QCheckBox,
+    QColorDialog,
     QDialog,
     QFileDialog,
     QInputDialog,
@@ -93,6 +94,8 @@ class CleanDialog(_Dialog):
 
 
 class Editor(QObject):
+    style_changed = Signal()  # taille ou couleur affichées dans le panneau
+
     def __init__(self, window) -> None:
         super().__init__(window)
         self.window = window
@@ -126,7 +129,16 @@ class Editor(QObject):
         self.text_size.setSuffix(" pt")
         self.text_size.setToolTip("Taille du texte ajouté")
         self.text_size.setValue(int(self.settings.value("text_size", 12)))
-        self.text_size.valueChanged.connect(lambda v: self.settings.setValue("text_size", v))
+        self.text_size.valueChanged.connect(self._size_changed)
+        # Taille appliquée au texte sélectionné une fois les clics sur les flèches finis :
+        # une seule étape à annuler.
+        self._size_timer = QTimer(self, singleShot=True, interval=400)
+        self._size_timer.timeout.connect(self._apply_size)
+        self._size_target: tuple | None = None
+        # Couleur du texte sélectionné, sinon celle du prochain texte ajouté.
+        self.shown_color = window.annotator.color(Tool.ADD_TEXT)
+        self.act_text_color = QAction(icon("palette"), "Autre couleur…", self)
+        self.act_text_color.triggered.connect(self.choose_text_color)
         # Index des polices installées préparé dès le choix de l'outil (quelques secondes
         # sous Windows) : la première modification de texte n'attend pas.
         tools[Tool.EDIT_TEXT].triggered.connect(lambda: threading.Thread(
@@ -142,6 +154,61 @@ class Editor(QObject):
         v.image_edited.connect(
             lambda page, img, rect: tab.apply(E.place_image, page, img, rect))
         v.link_activated.connect(lambda link: self.follow(tab, link))
+        v.annot_selected.connect(lambda _sel: self._show_selected(tab))
+
+    # ----- taille et couleur du texte ajouté -------------------------------------------------
+
+    def _selected_text(self) -> tuple | None:
+        """(onglet, page, xref) du texte ajouté sélectionné, ou None. Une saisie en cours
+        est d'abord validée : le changement porte sur le texte tel qu'écrit."""
+        tab = self.window.current_tab()
+        if tab:
+            tab.view.finish_inline()
+        sel = tab.view.selected_annot if tab else None
+        return (tab, sel[0], sel[1]) if sel and sel[3] in A.RESIZABLE else None
+
+    def choose_text_color(self) -> None:
+        c = QColorDialog.getColor(self.shown_color, self.window, "Couleur du texte")
+        if c.isValid():
+            self.set_text_color(c)
+
+    def set_text_color(self, c: QColor) -> None:
+        """Couleur du texte sélectionné et des prochains textes ajoutés."""
+        self.settings.setValue(f"tool_colors/{Tool.ADD_TEXT.name}", c.name())
+        if target := self._selected_text():
+            tab, page, xref = target
+            tab.apply(A.set_text_style, page, xref, self.window.annotator.author,
+                      color=(c.redF(), c.greenF(), c.blueF()))
+        self._show(self.text_size.value(), c)
+
+    def _size_changed(self, size: int) -> None:
+        self.settings.setValue("text_size", size)
+        if target := self._selected_text():
+            self._size_target = (*target, size)
+            self._size_timer.start()
+
+    def _apply_size(self) -> None:
+        tab, page, xref, size = self._size_target
+        tab.apply(A.set_text_style, page, xref, self.window.annotator.author, size=size)
+
+    def _show_selected(self, tab) -> None:
+        """Le panneau montre la taille et la couleur du texte sélectionné, sinon celles du
+        prochain texte ajouté."""
+        if self._size_timer.isActive() or tab is not self.window.current_tab():
+            return
+        if target := self._selected_text():
+            _, size, rgb = A.text_box(tab.doc, target[1], target[2])
+            self._show(size, QColor.fromRgbF(*rgb))
+        else:
+            self._show(int(self.settings.value("text_size", 12)),
+                       self.window.annotator.color(Tool.ADD_TEXT))
+
+    def _show(self, size: float, color: QColor) -> None:
+        self.text_size.blockSignals(True)
+        self.text_size.setValue(round(size))
+        self.text_size.blockSignals(False)
+        self.shown_color = color
+        self.style_changed.emit()
 
     # ----- gestes dans la vue ---------------------------------------------------------------
 

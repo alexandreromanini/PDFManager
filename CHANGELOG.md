@@ -2,6 +2,20 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [0.9.1] - 2026-10-18
+
+### Corrigé
+- **Couleur du texte ajouté** ignorée : « Couleur… » réglait la couleur de l'outil actif ;
+  choisie avant de sélectionner « Ajouter du texte », elle ne servait jamais. Le panneau
+  *Modifier* a désormais ses propres pastilles de couleur pour le texte ajouté.
+
+### Ajouté
+- **Changer la couleur ou la taille d'un texte déjà ajouté** : le sélectionner, puis choisir
+  une pastille, « Autre couleur » ou une taille dans le panneau *Modifier*. Le cadre suit la
+  taille (mêmes retours à la ligne), chaque changement s'annule (Ctrl+Z), et le panneau montre
+  la taille et la couleur du texte sélectionné.
+- Pastille choisie marquée d'une coche (le contour se confondait avec les couleurs sombres).
+
 ## [0.9.0] - 2026-10-18
 
 ### Ajouté

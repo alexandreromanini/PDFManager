@@ -17,7 +17,7 @@ Usage strictement personnel (PyMuPDF est sous AGPL).
 | 6 | OCR, compression, conversions, PDF/A | ✅ 0.6.1 |
 | 7 | Refonte visuelle (Windows 11, panneau d'outils, accueil) | ✅ 0.7.0 |
 | 7b | Logo, modifier / ajouter du texte sur la page | ✅ 0.8.3 |
-| - | Mises à jour depuis l'application | ✅ 0.9.0 |
+| - | Mises à jour depuis l'application | ✅ 0.9.1 |
 
 ## Développement (Linux)
 
@@ -138,7 +138,8 @@ Panneau d'outils → **Modifier le texte et les images** (et **Caviarder**) :
 - **Ajouter du texte** : tracer une bulle (elle s'étire avec la souris) et écrire dedans ;
   simple clic = bulle d'une ligne. Ensuite : glisser pour déplacer, tirer la poignée (coin
   bas droit) pour élargir, cliquer dessus pour modifier, la vider pour la supprimer.
-  Taille et couleur : dans le panneau.
+  Taille et couleur (pastilles ou « Autre couleur ») : dans le panneau ; elles s'appliquent
+  au texte sélectionné (le cadre suit la taille) et aux textes suivants.
 - **Insérer une image…** puis tracer son cadre. **Modifier les images** : cliquer une image,
   la glisser pour la déplacer, tirer sa poignée (coin bas droit) pour la redimensionner
   (proportions conservées), Suppr pour la retirer de la page.

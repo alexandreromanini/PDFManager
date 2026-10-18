@@ -37,6 +37,7 @@ from pdfmanager.ui.icons import icon, logo
 from pdfmanager.ui.viewer import COMMENT_TOOLS, Tool
 
 SWATCHES = ("#FFD60A", "#7BD389", "#64B5F6", "#F48FB1", "#E53935", "#1B1B1B")
+TEXT_SWATCHES = ("#000000", "#E53935", "#1E88E5", "#43A047", "#FB8C00", "#8E24AA")
 # Libellés courts des tuiles d'outils (deux lignes au plus).
 SHORT = {
     Tool.SELECT: "Sélection", Tool.HAND: "Main", Tool.HIGHLIGHT: "Surligner",
@@ -511,14 +512,19 @@ class Shell(QObject):
                 + [(w.editor.act_insert_image, "Insérer\nune image")])
         p.section("Texte ajouté")
         p.field("Taille", w.editor.text_size)
-        p.rows([w.annotator.color_action])
+        self.text_swatches = self._swatch_line(p, TEXT_SWATCHES, w.editor.set_text_color,
+                                               w.editor.act_text_color.trigger)
+        paint = lambda: self._paint(self.text_swatches, w.editor.shown_color)  # noqa: E731
+        w.editor.style_changed.connect(paint)
+        paint()
         p.hint("Modifier le texte : cliquez un paragraphe et corrigez-le directement sur la "
                "page, puis cliquez à côté (Échap pour annuler). Seules les lignes changées "
                "sont réécrites, dans la police d'origine ou la même police installée sur "
                "l'ordinateur ; sinon une police proche, et vous êtes prévenu.")
         p.hint("Ajouter du texte : tracez une bulle et écrivez dedans. Ensuite, glissez-la "
                "pour la déplacer, tirez sa poignée pour l'élargir, cliquez dessus pour la "
-               "modifier.")
+               "modifier. Taille et couleur s'appliquent au texte sélectionné et aux "
+               "suivants.")
         return p.finish()
 
     def _page_comment(self) -> QWidget:
@@ -526,23 +532,8 @@ class Shell(QObject):
         p = ToolPage(self, "Commenter", "message-square")
         p.tiles(self._tool_tiles(COMMENT_TOOLS))
         p.section("Couleur")
-        line = QHBoxLayout()
-        line.setSpacing(8)
-        self.swatches = []
-        for hexa in SWATCHES:
-            b = QToolButton()
-            b.setFixedSize(26, 26)
-            b.setToolTip(hexa)
-            b.clicked.connect(lambda _=False, h=hexa: w.annotator.set_color(QColor(h)))
-            line.addWidget(b)
-            self.swatches.append((b, hexa))
-        more = QToolButton()
-        more.setIcon(icon("palette"))
-        more.setToolTip("Autre couleur…")
-        more.clicked.connect(lambda: w.annotator.color_action.trigger())
-        line.addWidget(more)
-        line.addStretch(1)
-        p.lay.addLayout(line)
+        self.swatches = self._swatch_line(p, SWATCHES, w.annotator.set_color,
+                                          w.annotator.color_action.trigger)
         p.field("Épaisseur des traits", w.annotator.width_spin)
         p.section("Commentaires")
         p.row("Voir la liste des commentaires", "list",
@@ -553,14 +544,39 @@ class Shell(QObject):
         self._paint_swatches()
         return p.finish()
 
+    def _swatch_line(self, p: ToolPage, colors, pick, more) -> list:
+        """Pastilles de couleur + « Autre couleur… » ; renvoie [(bouton, couleur)]."""
+        line = QHBoxLayout()
+        line.setSpacing(8)
+        swatches = []
+        for hexa in colors:
+            b = QToolButton()
+            b.setFixedSize(26, 26)
+            b.setToolTip(hexa)
+            b.clicked.connect(lambda _=False, h=hexa: pick(QColor(h)))
+            line.addWidget(b)
+            swatches.append((b, hexa))
+        other = QToolButton()
+        other.setIcon(icon("palette"))
+        other.setToolTip("Autre couleur…")
+        other.clicked.connect(lambda: more())
+        line.addWidget(other)
+        line.addStretch(1)
+        p.lay.addLayout(line)
+        return swatches
+
     def _paint_swatches(self, *_) -> None:
-        current = self.window.annotator.color().name().upper()
-        for b, hexa in self.swatches:
-            ring = theme.current["text"] if hexa.upper() == current else theme.current[
-                "border_strong"]
-            width = 2 if hexa.upper() == current else 1
+        self._paint(self.swatches, self.window.annotator.color())
+
+    @staticmethod
+    def _paint(swatches: list, color: QColor) -> None:
+        current = color.name().upper()
+        for b, hexa in swatches:  # coche : lisible quelle que soit la couleur
+            b.setText("✓" if hexa.upper() == current else "")
+            mark = "#FFFFFF" if QColor(hexa).lightness() < 170 else "#1B1B1B"
             b.setStyleSheet(f"QToolButton {{ background: {hexa}; border-radius: 13px; "
-                            f"border: {width}px solid {ring}; }}")
+                            f"border: 1px solid {theme.current['border_strong']}; "
+                            f"color: {mark}; font-size: 15px; font-weight: bold; }}")
 
     def _page_forms(self) -> QWidget:
         p = ToolPage(self, "Formulaires", "text-cursor-input")

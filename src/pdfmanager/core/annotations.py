@@ -284,6 +284,21 @@ def update_text_box(doc: PdfDocument, page: int, xref: int, text: str,
         annot.update()
 
 
+def set_text_style(doc: PdfDocument, page: int, xref: int, author: str, *,
+                   color: Color | None = None, size: float | None = None) -> None:
+    """Couleur et/ou taille d'un texte ajouté. Le cadre grandit ou rétrécit avec la taille :
+    les retours à la ligne restent les mêmes et rien n'est coupé."""
+    _, old_size, old_color = text_box(doc, page, xref)
+    with doc.edit("Taille du texte" if size else "Couleur du texte") as d:
+        p = d[page]
+        annot = _load(p, xref)
+        if size and size != old_size:
+            r, k = annot.rect, size / old_size
+            annot.set_rect(pymupdf.Rect(r.x0, r.y0, r.x0 + r.width * k, r.y0 + r.height * k))
+        _stamp_info(annot, author)
+        annot.update(fontsize=size or old_size, text_color=color or old_color)
+
+
 def resize(doc: PdfDocument, page: int, xref: int, rect: pymupdf.Rect, author: str) -> None:
     with doc.edit("Redimensionner le texte") as d:
         p = d[page]
