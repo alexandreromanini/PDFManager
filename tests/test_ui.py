@@ -186,8 +186,10 @@ def test_drop_non_pdf_explains_and_search_arrows(qtbot, sample_pdf, tmp_path):
 
 
 def test_second_launch_opens_files_in_running_window(qtbot, sample_pdf, tmp_path):
-    """Instance unique : un 2e lancement confie ses PDF à la fenêtre ouverte (onglets)."""
-    import threading
+    """Instance unique : un 2e lancement (vrai second processus, comme un double-clic dans
+    l'Explorateur) confie ses PDF à la fenêtre ouverte, en onglets."""
+    import subprocess
+    import sys
 
     from conftest import make_pdf
 
@@ -198,10 +200,12 @@ def test_second_launch_opens_files_in_running_window(qtbot, sample_pdf, tmp_path
     assert not app.send_to_running([str(sample_pdf)], name)  # personne n'écoute encore
     app.serve_instance(win, name)
     other = make_pdf(tmp_path / "autre.pdf")
-    sent = []
-    worker = threading.Thread(target=lambda: sent.append(
-        app.send_to_running([str(sample_pdf), str(other)], name)))
-    worker.start()
+    code = ("import sys\nfrom PySide6.QtCore import QCoreApplication\n"
+            "app = QCoreApplication([])\nfrom pdfmanager.app import send_to_running\n"
+            f"sys.exit(0 if send_to_running({[str(sample_pdf), str(other)]!r}, {name!r}) "
+            "else 3)")
+    proc = subprocess.Popen([sys.executable, "-c", code])
+    qtbot.waitUntil(lambda: proc.poll() is not None, timeout=20000)
+    assert proc.returncode == 0, "connexion à l'instance impossible"
     qtbot.waitUntil(lambda: win.tabs.count() == 2, timeout=5000)
-    worker.join()
-    assert sent == [True] and win.current_tab().doc.path == other
+    assert win.current_tab().doc.path == other
