@@ -104,3 +104,4 @@ def test_sync_survives_tab_being_removed(qtbot, sample_pdf):
     win.tabs.addTab(QWidget(), "en cours de retrait")
     win._sync()
     assert win.tabs.tabText(0) == sample_pdf.name
+    win.tabs.removeTab(1)
