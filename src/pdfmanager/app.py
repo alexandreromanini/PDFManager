@@ -136,7 +136,8 @@ def send_to_running(paths: list[str], name: str | None = None) -> bool:
         import ctypes
 
         ctypes.windll.user32.AllowSetForegroundWindow(-1)  # ASFW_ANY
-    sock.write(json.dumps([str(Path(p).absolute()) for p in paths]).encode("utf-8"))
+    # une ligne JSON : le retour à la ligne marque la fin du message
+    sock.write(json.dumps([str(Path(p).absolute()) for p in paths]).encode("utf-8") + b"\n")
     sock.waitForBytesWritten(2000)
     sock.disconnectFromServer()
     if sock.state() != QLocalSocket.LocalSocketState.UnconnectedState:
@@ -156,12 +157,19 @@ def serve_instance(win, name: str | None = None) -> None:
         log.warning("Instance unique indisponible : %s", server.errorString())
         return
 
-    def received(sock) -> None:
+    def received(sock, buf: bytearray) -> None:
+        """Lu au fil de l'eau : sous Windows (tube nommé), les données ne sont plus lisibles
+        une fois la déconnexion signalée. Le message se termine par un retour à la ligne."""
+        buf.extend(bytes(sock.readAll()))
+        if not buf.endswith(b"\n"):
+            return
+        sock.readyRead.disconnect()
+        sock.disconnectFromServer()
+        sock.deleteLater()
         try:
-            paths = json.loads(bytes(sock.readAll()).decode("utf-8") or "[]")
+            paths = json.loads(buf.decode("utf-8"))
         except ValueError:
             paths = []
-        sock.deleteLater()
         if win.isMinimized():
             win.showNormal()
         win.raise_()
@@ -171,7 +179,10 @@ def serve_instance(win, name: str | None = None) -> None:
 
     def connected() -> None:
         while (sock := server.nextPendingConnection()) is not None:
-            sock.disconnected.connect(lambda sock=sock: received(sock))
+            buf = bytearray()
+            sock.readyRead.connect(lambda sock=sock, buf=buf: received(sock, buf))
+            if sock.bytesAvailable():
+                received(sock, buf)
 
     server.newConnection.connect(connected)
     win.instance_server = server  # gardé en vie avec la fenêtre
