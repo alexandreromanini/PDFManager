@@ -318,6 +318,23 @@ def test_clean_metadata_keeps_invisible_ocr_text(tmp_path):
     assert "OCR" not in words(doc)
 
 
+def test_clean_signed_document(tmp_path, p12):
+    """Régression : « cannot find object in xref » sur un document signé (objet libéré par
+    la mise à jour incrémentale de la signature)."""
+    from pdfmanager.core import forms as F
+    from pdfmanager.core import signatures as S
+
+    d = PdfDocument(make_pdf(tmp_path / "a.pdf"))
+    F.add_field(d, 0, pymupdf.Rect(300, 600, 500, 660), "signature", "Sig1")
+    signed = tmp_path / "signé.pdf"
+    signed.write_bytes(S.sign(d.current_bytes(), "Sig1", S.load_signer(p12, "motdepasse")))
+    doc = PdfDocument(signed)
+    E.clean(doc)
+    assert not doc.incremental and "Bonjour" in words(doc)
+    doc.undo()
+    assert doc.incremental and not doc.modified
+
+
 def test_standard_unembedded_font_needs_no_warning(sample_pdf):
     doc = PdfDocument(sample_pdf)  # Helvetica non intégrée (police standard)
     assert E.edit_block(doc, block(doc, 80, 95), "Bonsoir page 1") == []
