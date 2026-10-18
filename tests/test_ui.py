@@ -136,3 +136,18 @@ def test_recent_menu_hides_missing_files(qtbot, sample_pdf, tmp_path):
     win._fill_recent()
     names = [a.text() for a in win.recent_menu.actions()]
     assert str(sample_pdf) in names and not any("disparu" in n for n in names)
+
+
+def test_render_cache_budget_is_shared_between_tabs():
+    """Plusieurs onglets se partagent le budget des rendus (et non 300 Mo chacun)."""
+    from PySide6.QtGui import QImage
+
+    from pdfmanager.ui import viewer
+
+    caches = [viewer.ImageCache(budget=200 * 2**20) for _ in range(4)]
+    img = QImage(1000, 1000, QImage.Format.Format_RGB888)  # ~3 Mo
+    for k in range(40):
+        for c in caches:
+            c.put((k, 1.0, 0, 0), img.copy())
+    share = max(viewer.MIN_SHARE, 200 * 2**20 // len(viewer.ImageCache.live))
+    assert all(c.size <= share + img.sizeInBytes() for c in caches)
