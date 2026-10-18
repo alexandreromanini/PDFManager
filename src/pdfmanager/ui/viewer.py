@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import dataclasses
 import math
+import weakref
 from collections import OrderedDict
 from enum import Enum
 
@@ -119,13 +120,21 @@ def _render(task: Task, doc: PdfDocument, key: RenderKey) -> tuple[RenderKey, QI
     return None if pix is None else (key, to_qimage(pix))
 
 
+TOTAL_BUDGET = 400 * 2**20  # rendus en mémoire, tous onglets confondus
+MIN_SHARE = 48 * 2**20
+
+
 class ImageCache:
     """LRU borné en octets. Garde aussi les anciens zooms et versions : ils servent
-    d'aperçu pendant le rendu du nouveau (pas de page blanche qui clignote)."""
+    d'aperçu pendant le rendu du nouveau (pas de page blanche qui clignote). Le budget est
+    partagé entre les onglets ouverts : dix gros documents n'occupent pas 3 Go."""
 
-    def __init__(self, budget: int = 300 * 2**20) -> None:
+    live: weakref.WeakSet[ImageCache] = weakref.WeakSet()
+
+    def __init__(self, budget: int = TOTAL_BUDGET) -> None:
         self.budget, self.size = budget, 0
         self._items: OrderedDict[RenderKey, QImage] = OrderedDict()
+        ImageCache.live.add(self)
 
     def __len__(self) -> int:
         return len(self._items)
@@ -144,7 +153,12 @@ class ImageCache:
             self.size -= self._items.pop(key).sizeInBytes()
         self._items[key] = img
         self.size += img.sizeInBytes()
-        while self.size > self.budget and len(self._items) > 1:
+        share = max(MIN_SHARE, self.budget // max(1, len(ImageCache.live)))
+        for cache in list(ImageCache.live):
+            cache._trim(share)
+
+    def _trim(self, limit: int) -> None:
+        while self.size > limit and len(self._items) > 1:
             self.size -= self._items.popitem(last=False)[1].sizeInBytes()
 
     def any_for_page(self, index: int, rotation: int) -> QImage | None:
