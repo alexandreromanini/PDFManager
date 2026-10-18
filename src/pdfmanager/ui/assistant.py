@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import re
 
-from PySide6.QtCore import QThreadPool, QUrl, Signal
+from PySide6.QtCore import Qt, QThreadPool, QUrl, Signal
 from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
@@ -100,6 +100,8 @@ class AssistantPanel(QWidget):
         ask.addWidget(self.send)
         c.addLayout(ask)
         lay.addWidget(self.chat)
+        for b in self.findChildren(QPushButton):
+            b.setFocusPolicy(Qt.FocusPolicy.TabFocus)  # contour de focus au clavier seulement
         self._show_ready()
 
     def _show_ready(self) -> None:

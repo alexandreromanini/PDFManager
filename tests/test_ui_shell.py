@@ -118,3 +118,18 @@ def test_logo(qtbot):
 
     assert not logo().isNull() and logo().availableSizes()
     assert (SRC.parent.parent / "packaging" / "pdfmanager.ico").stat().st_size > 10_000
+
+
+def test_keyboard_focus_is_visible(qtbot):
+    """Accessibilité : contour de focus sur les boutons ; les lignes et cartes ne prennent
+    le focus qu'au clavier (pas de contour après un clic)."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+
+    from pdfmanager.ui.shell import Row
+
+    w = MainWindow()
+    qtbot.addWidget(w)
+    css = QApplication.instance().styleSheet()
+    assert "QPushButton:focus" in css and "QToolButton:focus" in css
+    assert Row("Outil", "house").focusPolicy() == Qt.FocusPolicy.TabFocus
