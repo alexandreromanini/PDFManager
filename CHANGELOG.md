@@ -2,6 +2,13 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [0.9.2] - 2026-10-18
+
+### Modifié
+- **Nouveau logo « P-page »** : un P blanc dont la boucle est une feuille au coin plié, sur le
+  carré rouge, à plat (sans dégradé). Fenêtre, barre de l'application, exécutable, installeur
+  et fichiers PDF associés.
+
 ## [0.9.1] - 2026-10-18
 
 ### Corrigé
