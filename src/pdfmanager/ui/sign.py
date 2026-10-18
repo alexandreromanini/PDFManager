@@ -608,5 +608,9 @@ class Signer(QObject):
         path = folder / P.safe_filename(f"{tab.doc.path.stem} - version signée par "
                                         f"{st.signer}.pdf")
         data = tab.doc.current_bytes()[:st.revision_end]
-        write_atomic(path, lambda: data)
+        try:
+            write_atomic(path, lambda: data)
+        except OSError as e:
+            QMessageBox.warning(self.window, "Version signée", str(e))
+            return
         self.window.open_path(path)

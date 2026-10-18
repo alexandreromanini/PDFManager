@@ -145,3 +145,21 @@ def test_render_of_a_vanished_page_returns_none(sample_pdf):
     """Un rendu demandé en arrière-plan juste avant une suppression ne doit pas échouer."""
     doc = PdfDocument(sample_pdf)
     assert doc.render(3, 1.0) is None and doc.render(2, 0.2) is not None
+
+
+def test_write_error_is_readable(tmp_path, monkeypatch):
+    """Écriture impossible : message en français, sans code système ni fichier temporaire."""
+    import errno
+    import tempfile
+
+    from pdfmanager.core.document import write_atomic
+
+    def denied(*a, **k):
+        raise PermissionError(errno.EACCES, "Permission denied", "/x/.~abc.tmp")
+
+    monkeypatch.setattr(tempfile, "mkstemp", denied)
+    with pytest.raises(OSError) as e:
+        write_atomic(tmp_path / "copie.pdf", lambda: b"x")
+    assert str(e.value).startswith("Impossible d'enregistrer « copie.pdf »")
+    assert "accès refusé" in str(e.value) and "Errno" not in str(e.value)
+    assert ".tmp" not in str(e.value)

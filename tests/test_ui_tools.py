@@ -192,3 +192,19 @@ def test_external_tools_report(qtbot, win, monkeypatch):
     monkeypatch.setattr(external, "find_libreoffice", lambda: None)
     win.tools.external_tools()
     assert "eng, fra" in shown[0] and "LibreOffice (Office → PDF) : non détecté" in shown[0]
+
+
+def test_write_failure_shows_message_not_crash(qtbot, win, sample_pdf, tmp_path, monkeypatch):
+    """Régression : écrire dans un dossier protégé donnait « Erreur inattendue »."""
+    import errno
+    import tempfile
+
+    tab = win.open_path(sample_pdf)
+    monkeypatch.setattr(QFileDialog, "getSaveFileName",
+                        lambda *a, **k: (str(tmp_path / "texte.txt"), ""))
+    monkeypatch.setattr(tempfile, "mkstemp", lambda *a, **k: (_ for _ in ()).throw(
+        PermissionError(errno.EACCES, "Permission denied")))
+    shown = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda parent, title, text: shown.append(text))
+    win.tools.export_text(tab)
+    assert shown and "accès refusé" in shown[0]
