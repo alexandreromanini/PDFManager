@@ -158,3 +158,22 @@ def test_sidebar_checkbox_follows_tools(qtbot, sample_pdf):
     assert not tab.sidebar.isHidden() and w.act_sidebar.isChecked()
     w.act_sidebar.trigger()
     assert tab.sidebar.isHidden()
+
+
+def test_tool_panels_scroll_and_long_labels_elide(qtbot, sample_pdf):
+    """Petite fenêtre : le panneau défile au lieu d'être coupé ; libellé trop long abrégé
+    avec le texte complet en info-bulle."""
+    from PySide6.QtWidgets import QScrollArea
+
+    from pdfmanager.ui.shell import Row
+
+    w = MainWindow()
+    qtbot.addWidget(w, before_close_func=_discard_all)
+    w.resize(800, 600)
+    w.show()
+    w.open_path(sample_pdf)
+    w.shell.open_entry(w.shell.entry("organize"))
+    page = w.shell.panel.currentWidget()
+    assert isinstance(page, QScrollArea) and page.verticalScrollBar().maximum() > 0
+    long = next(r for r in page.findChildren(Row) if r.text_.startswith("En-tête"))
+    assert long.caption.text().endswith("…") and long.toolTip() == long.text_

@@ -112,9 +112,27 @@ class Row(QPushButton):
             b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
             lay.addWidget(b)
         self.caption = label(text)
+        self.caption.setMinimumWidth(1)  # rétrécit avec le panneau (texte abrégé, « … »)
         lay.addWidget(self.caption, 1)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setFocusPolicy(Qt.FocusPolicy.TabFocus)  # focus au clavier seulement
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._elide()
+
+    def changeEvent(self, event) -> None:
+        super().changeEvent(event)
+        if event.type() in (QEvent.Type.FontChange, QEvent.Type.StyleChange):
+            QTimer.singleShot(0, self._elide)  # après la nouvelle mise en page
+
+    def _elide(self) -> None:
+        """Libellé trop long pour le panneau : abrégé, texte complet en info-bulle."""
+        shown = self.caption.fontMetrics().elidedText(
+            self.text_, Qt.TextElideMode.ElideRight, self.caption.width())
+        self.caption.setText(shown)
+        if shown != self.text_:
+            self.setToolTip(self.text_)
 
 
 @dataclass
@@ -127,13 +145,19 @@ class Entry:
     needs_doc: bool = True
 
 
-class ToolPage(QWidget):
-    """Panneau d'un outil : en-tête (retour, pastille, titre), puis sections."""
+class ToolPage(QScrollArea):
+    """Panneau d'un outil : en-tête (retour, pastille, titre), puis sections ; défile quand
+    la fenêtre est trop basse pour tout montrer."""
 
     def __init__(self, shell: Shell, title: str, icon_name: str) -> None:
         super().__init__()
         self.shell = shell
-        lay = self.lay = QVBoxLayout(self)
+        self.setObjectName("ToolScroll")
+        self.setWidgetResizable(True)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        inner = QWidget()
+        self.setWidget(inner)
+        lay = self.lay = QVBoxLayout(inner)
         lay.setContentsMargins(12, 4, 12, 12)
         lay.setSpacing(8)
         head = QHBoxLayout()
