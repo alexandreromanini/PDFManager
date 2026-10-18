@@ -9,7 +9,7 @@ import tempfile
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from PySide6.QtCore import QLibraryInfo, QLocale, QStandardPaths, QTranslator
+from PySide6.QtCore import QLibraryInfo, QLocale, QStandardPaths, QTimer, QTranslator
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from pdfmanager import __version__
@@ -191,4 +191,6 @@ def main() -> int:
     win.show()
     for arg in args:
         win.open_path(arg)
+    if getattr(sys, "frozen", False):  # version installée : pas en développement
+        QTimer.singleShot(4000, win.updater.check_in_background)
     return app.exec()

@@ -2,6 +2,16 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [0.9.0] - 2026-10-18
+
+### Ajouté
+- **Mises à jour depuis l'application** : au démarrage (ou *menu ⋯ → Aide → Rechercher les
+  mises à jour*), PDFManager regarde si une version plus récente est publiée sur GitHub.
+  « Installer maintenant » télécharge l'installeur (taille et empreinte vérifiées), propose
+  d'enregistrer les documents modifiés, ferme l'application, l'installe sans assistant puis
+  la relance. Hors ligne, rien n'est signalé.
+- Chaque tag `vX.Y.Z` publie une *Release* GitHub (installeur + notes du CHANGELOG).
+
 ## [0.8.3] - 2026-10-15
 
 ### Corrigé
