@@ -291,3 +291,87 @@ def test_edit_text_recognized_by_ocr(tmp_path):
     assert sum(pix.pixel(150, 160)) > 650  # fond crème conservé (pas de bande blanche/noire)
     assert pix.pixel(150, 160) != (255, 255, 255)
     assert len(ink) < 3000  # une seule ligne de texte, pas deux superposées
+
+
+# ----- traduction (DeepL remplacé par un traducteur factice) ----------------------------
+
+def _upper(texts):
+    return [t.upper() for t in texts]
+
+
+def test_deepl_batches_and_errors(monkeypatch):
+    from pdfmanager.core import deepl
+
+    texts = [f"phrase {i}" for i in range(120)]
+    assert deepl.batches(texts) == [(0, 50), (50, 100), (100, 120)]
+    assert deepl.batches(["x" * 60_000, "y" * 60_000, "z"]) == [(0, 1), (1, 3)]
+    assert deepl.endpoint("abc:fx").startswith("https://api-free.deepl.com")
+    assert deepl.parse_response({"translations": [{"text": "Hello"}]}, 1) == ["Hello"]
+    with pytest.raises(deepl.DeepLError):
+        deepl.parse_response({"translations": []}, 1)
+    with pytest.raises(deepl.DeepLError, match="clé"):
+        deepl.translate("  ", ["Bonjour"], "EN-US")
+    sent = []
+
+    class Reply(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    def fake_urlopen(request, timeout):
+        import json
+        body = json.loads(request.data)
+        sent.append((request.full_url, request.get_header("Authorization"), body))
+        reply = {"translations": [{"text": t.upper()} for t in body["text"]]}
+        return Reply(json.dumps(reply).encode())
+
+    monkeypatch.setattr(deepl, "urlopen", fake_urlopen)
+    assert deepl.translate("k:fx", ["un", "deux"], "EN-US") == ["UN", "DEUX"]
+    assert sent[0][0].startswith("https://api-free") and sent[0][1] == "DeepL-Auth-Key k:fx"
+    assert sent[0][2] == {"text": ["un", "deux"], "target_lang": "EN-US"}
+
+
+def test_translate_in_place(sample_pdf):
+    from pdfmanager.core import translate
+
+    data = open(sample_pdf, "rb").read()
+    sent = []
+    out, report = translate.translate_pdf(data, None, lambda t: sent.extend(t) or _upper(t))
+    assert "Bonjour page 1" in sent and report.translated >= 6 and report.overflow == 0
+    before, after = pymupdf.open(stream=data), pymupdf.open(stream=out)
+    assert "BONJOUR PAGE 1" in after[0].get_text() and "Bonjour" not in after[0].get_text()
+    w0, w1 = before[0].get_text("words")[0], after[0].get_text("words")[0]
+    assert abs(w0[0] - w1[0]) < 1.5 and abs(w0[1] - w1[1]) < 3  # même place
+
+
+def test_translate_table_and_pages(tmp_path):
+    from pdfmanager.core import translate
+
+    doc = pymupdf.open()
+    p = doc.new_page()
+    p.insert_text((72, 80), "Facture n° 2025-042", fontsize=16, fontname="hebo")
+    for y, row in ((150, ("Désignation", "Qté", "Total")), (175, ("Conseil", "3", "1 350,00"))):
+        for x, cell in zip((77, 277, 437), row, strict=True):
+            p.insert_text((x, y), cell, fontsize=10)
+    doc.new_page().insert_text((72, 80), "Deuxième page", fontsize=12)
+    data = doc.tobytes()
+    sent = []
+    out, report = translate.translate_pdf(data, [0], lambda t: sent.extend(t) or _upper(t))
+    assert all(translate.has_words(t) for t in sent), sent  # nombres non envoyés
+    after = pymupdf.open(stream=out)
+    words = {w[4]: w for w in after[0].get_text("words")}
+    assert {"DÉSIGNATION", "QTÉ", "TOTAL", "CONSEIL", "1", "350,00"} <= set(words)
+    assert abs(words["TOTAL"][0] - 437) < 1.5  # chaque cellule à sa place
+    assert after[1].get_text().strip() == "Deuxième page"  # page non demandée intacte
+    assert report.overflow == 0
+
+
+def test_translate_pieces():
+    from pdfmanager.core import translate
+
+    assert translate.join("exem-", "ple") == "exemple"
+    assert translate.join("exemple", "Suite") == "exemple Suite"
+    assert translate.winansi("Été 10 € « oui »") and not translate.winansi("Привет")
+    assert not translate.has_words("12/03/2026 1 250,00") and translate.has_words("Total HT")

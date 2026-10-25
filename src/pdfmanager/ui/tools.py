@@ -1,4 +1,4 @@
-"""Menu « Outils » (OCR, réduction de taille, protection, comparaison, PDF/A),
+"""Menu « Outils » (OCR, réduction de taille, traduction, protection, comparaison, PDF/A),
 sous-menus « Exporter » et « Créer un PDF », propriétés du document, outils externes."""
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QSpinBox,
 )
 
-from pdfmanager.core import compare, convert, ocr, optimize, security
+from pdfmanager.core import compare, convert, deepl, ocr, optimize, security
 from pdfmanager.core import pages as P
 from pdfmanager.core.document import Cancelled, PdfError, write_atomic
 from pdfmanager.services import external, jobs
@@ -70,6 +70,55 @@ class OcrDialog(_Dialog):
 
     def validate(self) -> None:
         self.pages.pages()
+
+
+class TranslateDialog(_Dialog):
+    def __init__(self, parent, page_count: int, key: str, language: str) -> None:
+        super().__init__(parent, "Traduire le document")
+        self.language = QComboBox()
+        for code, label in deepl.LANGUAGES:
+            self.language.addItem(label, code)
+        self.language.setCurrentIndex(max(0, self.language.findData(language)))
+        self.pages = _PagesField(page_count, "")
+        self.key = QLineEdit(key)
+        self.key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.key.setPlaceholderText("xxxxxxxx-xxxx-…:fx")
+        link = QLabel(f'Pas de clé ? <a href="{deepl.KEY_URL}">Obtenir une clé gratuite</a> '
+                      "(500 000 caractères par mois)")
+        link.setOpenExternalLinks(True)
+        self.remember = QCheckBox("Mémoriser la clé sur cet ordinateur")
+        self.remember.setChecked(True)
+        self.form.addRow("Traduire en :", self.language)
+        self.form.addRow("Pages :", self.pages)
+        self.form.addRow("Clé DeepL :", self.key)
+        self.form.addRow("", link)
+        self.form.addRow(self.remember)
+        self.layout_.insertWidget(0, QLabel(
+            "Crée une copie traduite, avec la même mise en page : chaque paragraphe est\n"
+            "remplacé à sa place, images et tableaux restent. Le texte est envoyé à DeepL\n"
+            "pour être traduit."))
+        self.finish()
+
+    def validate(self) -> None:
+        self.pages.pages()
+        if not self.key.text().strip():
+            raise ValueError("Indiquez votre clé DeepL.")
+
+
+def translation_summary(language: str, r) -> str:
+    """« Document traduit en anglais (américain) (12 passages) ; 2 réduits… »."""
+    def n(count: int, one: str, many: str) -> str:
+        return f"{count} {one if count == 1 else many}"
+
+    text = f"Document traduit en {language.lower()} ({n(r.translated, 'passage', 'passages')})"
+    if r.shrunk:
+        text += f" ; {n(r.shrunk, 'réduit', 'réduits')} pour tenir dans leur cadre"
+    if r.overflow:
+        text += f" ; {n(r.overflow, 'dépasse', 'dépassent')} de son cadre, à vérifier"
+    if r.skipped:
+        text += (f" ; {n(r.skipped, 'laissé', 'laissés')} en langue d'origine (texte incliné "
+                 "ou scanné)")
+    return text
 
 
 class CompressDialog(_Dialog):
@@ -184,6 +233,8 @@ class Tools(QObject):
                            icon_name="scan-text")
         self.act_compress = act(self.menu, "Réduire la taille du fichier…", self.compress,
                                 icon_name="shrink")
+        self.act_translate = act(self.menu, "Traduire le document…", self.translate,
+                                 icon_name="languages")
         self.menu.addSeparator()
         self.act_protect = act(self.menu, "Protéger par mot de passe…", self.protect,
                                icon_name="lock")
@@ -293,6 +344,41 @@ class Tools(QObject):
                 f"{size_text(before)} → {size_text(len(data))} (−{gain} %)\n"
                 f"Copie enregistrée : {target.name}\n\nL'ouvrir ?"
         ) == QMessageBox.StandardButton.Yes:
+            self.window.open_path(target)
+
+    def translate(self, tab) -> None:
+        settings = self.window.settings
+        dlg = TranslateDialog(self.window, tab.doc.page_count, settings.value("deepl_key", ""),
+                              settings.value("translate_lang", "EN-US"))
+        if dlg.exec() != TranslateDialog.DialogCode.Accepted:
+            return
+        code, language = dlg.language.currentData(), dlg.language.currentText()
+        key = dlg.key.text().strip()
+        settings.setValue("translate_lang", code)
+        settings.setValue("deepl_key", key if dlg.remember.isChecked() else "")
+        doc = tab.doc
+        target = self._target("Enregistrer la traduction",
+                              doc.path.with_name(f"{doc.path.stem} - {language}.pdf"),
+                              PDF_FILTER, ".pdf")
+        if not target:
+            return
+        result = self._run("Traduction…", jobs.translate_document, doc, dlg.pages.pages(),
+                           key, code)
+        if result is None:
+            return
+        data, report = result
+        if not report.translated:
+            QMessageBox.information(self.window, "Traduire", (
+                "Rien n'a pu être traduit : le texte de ces pages est incliné, ou c'est un scan "
+                "(le texte reconnu par OCR est invisible et ne peut pas être remplacé)."
+                if report.skipped else "Ces pages ne contiennent pas de texte à traduire."))
+            return
+        if not self._save(target, data):
+            return
+        if QMessageBox.question(
+                self.window, "Traduire",
+                f"{translation_summary(language, report)}.\nCopie enregistrée : {target.name}"
+                "\n\nL'ouvrir ?") == QMessageBox.StandardButton.Yes:
             self.window.open_path(target)
 
     def protect(self, tab) -> None:

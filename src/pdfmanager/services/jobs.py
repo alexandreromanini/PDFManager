@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from pdfmanager.core import convert, ocr, optimize
+from pdfmanager.core import convert, deepl, ocr, optimize, translate
 from pdfmanager.core.document import PdfDocument
 from pdfmanager.services.processes import parallel_map, run_in_process
 
@@ -29,6 +29,18 @@ def ocr_document(task, doc: PdfDocument, pages: list[int], language: str,
 def compress(task, doc: PdfDocument, level: str, linearize: bool) -> bytes:
     return run_in_process(task, optimize.compress, doc.current_bytes(), doc._password,
                           level, linearize)
+
+
+def translate_document(task, doc: PdfDocument, pages: list[int], key: str,
+                       target: str) -> tuple[bytes, translate.Report]:
+    """Copie traduite par DeepL, même mise en page (core.translate) ; le document ouvert ne
+    change pas. « Annuler » arrête entre deux lots."""
+    def translator(texts: list[str]) -> list[str]:
+        return deepl.translate(key, texts, target, cancelled=lambda: task.cancelled,
+                               progress=lambda done, total: task.emit_partial(
+                                   (done, total, "Traduction")))
+
+    return translate.translate_pdf(doc.snapshot().tobytes(), pages, translator)
 
 
 def to_docx(task, doc: PdfDocument, target: Path) -> None:

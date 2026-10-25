@@ -2,6 +2,16 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [0.11.0] - 2026-10-25
+
+### Ajouté
+- **Traduire le document** (Outils, et catalogue *Convertir et optimiser*) : copie traduite
+  par DeepL, même mise en page ; 28 langues ; clé DeepL mémorisée au choix. Comme la
+  version Rust 0.9.0.
+
+### Modifié
+- Champ « Pages » : « toutes » est accepté (c'est le texte affiché en grisé).
+
 ## [0.10.3] - 2026-10-18
 
 ### Modifié

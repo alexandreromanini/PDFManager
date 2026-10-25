@@ -449,6 +449,8 @@ class Shell(QObject):
                       run=lambda: w.tools.act_compress.trigger()),
                 Entry("convert", "Convertir (Word, images, texte)", "arrow-left-right",
                       self._page_convert, needs_doc=False),
+                Entry("translate", "Traduire le document", "languages",
+                      run=lambda: w.tools.act_translate.trigger()),
                 Entry("compare", "Comparer deux PDF", "columns-2",
                       run=lambda: w.tools.act_compare.trigger()),
                 Entry("pdfa", "Archiver (PDF/A)", "archive",

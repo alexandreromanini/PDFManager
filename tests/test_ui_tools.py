@@ -208,3 +208,37 @@ def test_write_failure_shows_message_not_crash(qtbot, win, sample_pdf, tmp_path,
     monkeypatch.setattr(QMessageBox, "warning", lambda parent, title, text: shown.append(text))
     win.tools.export_text(tab)
     assert shown and "accès refusé" in shown[0]
+
+
+def test_translate_from_menu(qtbot, win, sample_pdf, tmp_path, monkeypatch):
+    from pdfmanager.core import deepl
+
+    target = tmp_path / "traduit.pdf"
+    sent = []
+    monkeypatch.setattr(deepl, "translate", lambda key, texts, lang, **k: sent.append(
+        (key, lang)) or [t.upper() for t in texts])
+    monkeypatch.setattr(T.TranslateDialog, "exec", accept_with(
+        key=lambda dlg: dlg.key.setText("ma-cle:fx"),
+        lang=lambda dlg: dlg.language.setCurrentIndex(dlg.language.findData("DE"))))
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(target), ""))
+    asked = []
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: asked.append(a[2]) or B.No)
+    tab = win.open_path(sample_pdf)
+    win.tools.translate(tab)
+    assert sent == [("ma-cle:fx", "DE")]
+    assert "BONJOUR PAGE 2" in pymupdf.open(target)[1].get_text()
+    assert "traduit en allemand" in asked[0] and not tab.doc.modified
+    assert win.settings.value("deepl_key") == "ma-cle:fx"  # mémorisée, case cochée
+    assert win.shell.entry("translate").text == "Traduire le document"
+
+
+def test_translate_dialog_requires_key(qtbot, win, sample_pdf, monkeypatch):
+    warned = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: warned.append(a[2]))
+    dlg = T.TranslateDialog(win, 3, "", "EN-US")
+    dlg.accept()
+    assert warned == ["Indiquez votre clé DeepL."] and dlg.result() == 0
+    dlg.pages.setText("toutes")
+    dlg.key.setText("k")
+    dlg.accept()
+    assert dlg.result() == 1

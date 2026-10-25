@@ -20,6 +20,7 @@ Usage strictement personnel (PyMuPDF est sous AGPL).
 | - | Mises à jour depuis l'application, nouveau logo | ✅ 0.9.2 |
 | 8 | Assistant IA hors ligne (résumé, questions) | ✅ 0.10.0 |
 | - | Audit complet ([AUDIT.md](AUDIT.md)) : 25 corrections + 4 décisions | ✅ 0.10.2 |
+| 9 | Traduction du document (DeepL, même mise en page) | ✅ 0.11.0 |
 
 ## Développement (Linux)
 
@@ -166,6 +167,12 @@ Depuis le panneau d'outils (groupe *Convertir et optimiser*) ou le menu ⋯ → 
   pages scannées (texte invisible posé sur l'image ; l'aspect ne change pas). Par défaut,
   seules les pages sans texte sont analysées. Plusieurs pages en parallèle ; Annuler arrête
   tout de suite ; Ctrl+Z retire le texte ajouté.
+- **Traduire le document** : copie traduite par DeepL (clé gratuite : 500 000 caractères
+  par mois, mémorisée si on le souhaite), avec la même mise en page : chaque paragraphe ou
+  cellule est remplacé à sa place, même police (installée) ou la plus proche, même couleur ;
+  plus long, il est réduit jusqu'à 70 %, puis déborde vers le bas (signalé). Nombres et
+  dates ne partent pas. 28 langues à alphabet latin, grec ou cyrillique. Texte incliné ou
+  scanné (couche OCR) laissé tel quel ; paragraphes justifiés réécrits alignés à gauche.
 - **Réduire la taille du fichier** : *sans perte* (structure, polices réduites aux
   caractères utilisés), *équilibré* (images ramenées à 150 dpi), *maximal* (96 dpi).
   Écrit une copie (« … - réduit.pdf ») et affiche le gain.

@@ -22,7 +22,7 @@ A4 = (595.0, 842.0)
 def parse_ranges(spec: str, page_count: int) -> list[list[int]]:
     """« 1-3, 5, 8- » → [[0, 1, 2], [4], [7, …, n-1]]. Vide = toutes les pages.
     Chaque élément séparé par une virgule est un groupe (utile pour scinder)."""
-    if not spec.strip():
+    if not spec.strip() or spec.strip().lower() in ("toutes", "tout", "all"):
         return [list(range(page_count))]
     groups = []
     for part in re.split(r"[,;]", spec):
