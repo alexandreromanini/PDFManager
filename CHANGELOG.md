@@ -2,7 +2,9 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
-## [0.11.0] - 2026-10-25
+## [0.11.1] - 2026-10-25
+
+(La 0.11.0 n'a pas été publiée : sa compilation a installé PyMuPDF 2.0.)
 
 ### Ajouté
 - **Traduire le document** (Outils, et catalogue *Convertir et optimiser*) : copie traduite

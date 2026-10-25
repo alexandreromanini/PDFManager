@@ -20,7 +20,7 @@ Usage strictement personnel (PyMuPDF est sous AGPL).
 | - | Mises à jour depuis l'application, nouveau logo | ✅ 0.9.2 |
 | 8 | Assistant IA hors ligne (résumé, questions) | ✅ 0.10.0 |
 | - | Audit complet ([AUDIT.md](AUDIT.md)) : 25 corrections + 4 décisions | ✅ 0.10.2 |
-| 9 | Traduction du document (DeepL, même mise en page) | ✅ 0.11.0 |
+| 9 | Traduction du document (DeepL, même mise en page) | ✅ 0.11.1 |
 
 ## Développement (Linux)
 
