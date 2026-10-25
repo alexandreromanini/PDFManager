@@ -340,8 +340,9 @@ class MainWindow(QMainWindow):
         m.addAction("Outils externes détectés…", self.tools.external_tools)
         m.addAction("Rechercher les mises à jour…", self.updater.check_now)
         m.addAction("À propos", lambda: QMessageBox.about(
-            self, "À propos", f"PDFManager {__version__}\nUsage personnel - PySide6, PyMuPDF, "
-            "pyHanko, pikepdf, pdf2docx\nIcônes : Lucide (licence ISC)"))
+            self, "À propos", f"PDFManager {__version__}\nLogiciel libre, licence AGPL-3.0\n"
+            "github.com/alexandreromanini/PDFManager\n\nPySide6, PyMuPDF, pyHanko, pikepdf, "
+            "pdf2docx\nIcônes : Lucide (licence ISC)"))
 
         # Widgets de la barre du document et de la barre d'application (ui.shell).
         self.page_spin = QSpinBox()

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pdfmanager"
 dynamic = ["version"]
-description = "Lecteur et éditeur PDF personnel (PySide6 + PyMuPDF)"
+description = "Éditeur PDF gratuit et hors ligne pour Windows (PySide6 + PyMuPDF)"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
 license = "AGPL-3.0-or-later"

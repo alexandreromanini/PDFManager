@@ -2,6 +2,14 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
+## [Non publié]
+
+### Modifié
+- Fenêtre « À propos » : licence libre et adresse du projet (au lieu de « usage personnel »).
+- Présentation du projet : README en anglais et en français, captures d'écran, guide
+  d'utilisation et notes de développement dans `docs/`, guide de contribution, politique de
+  sécurité, modèles de signalement.
+
 ## [0.11.1] - 2026-10-25
 
 (La 0.11.0 n'a pas été publiée : sa compilation a installé PyMuPDF 2.0.)
@@ -24,7 +32,7 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [Sem
 
 ## [0.10.2] - 2026-10-18
 
-Décisions de l'audit ([AUDIT.md](AUDIT.md)).
+Décisions de l'audit ([AUDIT.md](docs/AUDIT.md)).
 
 ### Modifié
 - **Formulaires** : le texte se tape directement dans le champ, comme dans Acrobat (plus de
@@ -41,7 +49,7 @@ Décisions de l'audit ([AUDIT.md](AUDIT.md)).
 
 ## [0.10.1] - 2026-10-18
 
-Audit complet de l'application : voir [AUDIT.md](AUDIT.md) (32 issues, 25 corrigées).
+Audit complet de l'application : voir [AUDIT.md](docs/AUDIT.md) (32 issues, 25 corrigées).
 
 ### Corrigé
 - « Erreur inattendue » en fermant l'onglet courant (selon l'ordre des onglets).
