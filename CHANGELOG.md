@@ -11,6 +11,8 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [Sem
 
 ### Modifié
 - Champ « Pages » : « toutes » est accepté (c'est le texte affiché en grisé).
+- PyMuPDF limité à la série 1.x : la version 2.0, sortie cette semaine, casse le
+  caviardage, les annotations et les signatures.
 
 ## [0.10.3] - 2026-10-18
 

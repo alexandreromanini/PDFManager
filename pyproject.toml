@@ -12,7 +12,8 @@ license = "AGPL-3.0-or-later"
 dependencies = [
     # Essentials suffit (QtWidgets, QtGui, QtPrintSupport) et évite ~500 Mo de WebEngine.
     "PySide6-Essentials>=6.8",
-    "PyMuPDF>=1.26",
+    # 2.0 (octobre 2026) casse caviardage, annotations et signatures : 1.x jusqu'à adaptation.
+    "PyMuPDF>=1.26,<2",
     # Signatures PAdES (MIT) ; certifi et cryptography viennent avec.
     "pyHanko>=0.37",
     # Réparation, linéarisation, validation PDF/A (MPL-2.0) ; [pdfa] : son validateur.
