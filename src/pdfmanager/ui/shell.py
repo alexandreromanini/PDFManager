@@ -33,7 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from pdfmanager.ui import theme
-from pdfmanager.ui.icons import icon, logo
+from pdfmanager.ui.icons import TOOLS, icon, logo
 from pdfmanager.ui.viewer import COMMENT_TOOLS, Tool
 
 SWATCHES = ("#FFD60A", "#7BD389", "#64B5F6", "#F48FB1", "#E53935", "#1B1B1B")
@@ -430,6 +430,8 @@ class Shell(QObject):
 
     def _entries(self) -> list[tuple[str, list[Entry]]]:
         w = self.window
+        # Panneau « Commenter » (couleur, épaisseur, liste) : ouvert par chacun de ses outils.
+        self.comment_page = Entry("comment", "Commenter", "message-square", self._page_comment)
         return [
             ("Organiser", [
                 Entry("organize", "Organiser les pages", "layout-grid", self._page_organize),
@@ -440,8 +442,11 @@ class Shell(QObject):
             ("Modifier", [
                 Entry("edit", "Modifier le texte et les images", "file-pen-line",
                       self._page_edit),
-                Entry("comment", "Commenter", "message-square", self._page_comment),
                 Entry("forms", "Formulaires", "text-cursor-input", self._page_forms)]),
+            ("Commenter", [
+                Entry(f"comment-{t.name.lower()}", t.value, TOOLS[t.name],
+                      run=lambda t=t: self._comment_with(t))
+                for t in COMMENT_TOOLS if t not in (Tool.SELECT, Tool.HAND)]),
             ("Convertir et optimiser", [
                 Entry("ocr", "Reconnaître le texte (OCR)", "scan-text",
                       run=lambda: w.tools.act_ocr.trigger()),
@@ -523,6 +528,11 @@ class Shell(QObject):
         self.panel.setCurrentWidget(self.pages[e.key])
         if hasattr(self.pages[e.key], "on_show"):
             self.pages[e.key].on_show()
+
+    def _comment_with(self, tool: Tool) -> None:
+        """Outil de commentaire choisi dans le catalogue : son panneau s'ouvre, outil pris."""
+        self.open_entry(self.comment_page)
+        self.window.annotator.actions[tool].trigger()
 
     def show_catalog(self) -> None:
         if self.window.annotator.tool not in (Tool.SELECT, Tool.HAND):

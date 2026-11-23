@@ -5,6 +5,9 @@ Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [Sem
 ## [Non publié]
 
 ### Modifié
+- Catalogue d'outils : nouvelle section **Commenter** qui liste directement Surligner,
+  Souligner, Barrer, Note, Texte libre, les formes, le dessin et le tampon ; un clic ouvre
+  le panneau Commenter avec l'outil déjà choisi.
 - Fenêtre « À propos » : licence libre et adresse du projet (au lieu de « usage personnel »).
 - Présentation du projet : README en anglais et en français, captures d'écran, guide
   d'utilisation et notes de développement dans `docs/`, guide de contribution, politique de

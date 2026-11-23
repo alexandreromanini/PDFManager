@@ -39,7 +39,8 @@ Retour à l'[accueil du projet](../README.fr.md).
 
 ### Commentaires
 
-Panneau d'outils → **Commenter**, choisir un outil, puis :
+Panneau d'outils, section **Commenter** : cliquer l'outil voulu (Surligner, Note…). Le panneau
+Commenter s'ouvre avec cet outil choisi, sa couleur et son épaisseur ; puis :
 
 - **Surligner / Souligner / Barrer** : glisser sur le texte.
 - **Note** : cliquer à l'endroit voulu, saisir le texte.

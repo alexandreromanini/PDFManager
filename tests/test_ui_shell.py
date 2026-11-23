@@ -77,15 +77,20 @@ def test_catalog_search_and_tool_pages(qtbot, win, sample_pdf, monkeypatch):
     opened = []
     monkeypatch.setattr(QFileDialog, "getOpenFileNames",
                         lambda *a, **k: opened.append(1) or ([], ""))
-    shell.open_entry(shell.entry("comment"))  # sans document : propose d'en ouvrir un
+    shell.open_entry(shell.entry("comment-highlight"))  # sans document : propose d'en ouvrir un
     assert opened and shell.panel.currentIndex() == 0
 
     win.open_path(sample_pdf)
-    shell.open_entry(shell.entry("comment"))
+    # section « Commenter » du catalogue : l'outil choisi ouvre son panneau, déjà sélectionné
+    assert [e.text for e in dict(shell.entries)["Commenter"]][:3] == ["Surligner", "Souligner",
+                                                                       "Barrer"]
+    shell.open_entry(shell.entry("comment-ink"))
     page = shell.pages["comment"]
-    assert shell.panel.currentWidget() is page
+    assert shell.panel.currentWidget() is page and win.annotator.tool is Tool.INK
     tiles = {b.toolTip(): b for b in page.findChildren(QToolButton) if b.objectName() == "Tile"}
-    tiles[Tool.HIGHLIGHT.value].click()
+    assert tiles[Tool.INK.value].isChecked()
+    shell.show_catalog()
+    shell.open_entry(shell.entry("comment-highlight"))
     assert win.annotator.tool is Tool.HIGHLIGHT and tiles[Tool.HIGHLIGHT.value].isChecked()
     shell.swatches[1][0].click()  # vert
     assert win.annotator.color().name().upper() == shell.swatches[1][1]
