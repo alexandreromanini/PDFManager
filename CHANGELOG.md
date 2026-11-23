@@ -2,7 +2,7 @@
 
 Format : [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions [SemVer](https://semver.org/lang/fr/).
 
-## [Non publié]
+## [0.11.2] - 2026-11-23
 
 ### Modifié
 - Catalogue d'outils : nouvelle section **Commenter** qui liste directement Surligner,
